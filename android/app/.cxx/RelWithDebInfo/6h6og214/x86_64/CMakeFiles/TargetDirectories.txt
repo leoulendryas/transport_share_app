@@ -1,0 +1,2 @@
+/home/leoul/Desktop/transport_share_app/android/app/.cxx/RelWithDebInfo/6h6og214/x86_64/CMakeFiles/edit_cache.dir
+/home/leoul/Desktop/transport_share_app/android/app/.cxx/RelWithDebInfo/6h6og214/x86_64/CMakeFiles/rebuild_cache.dir

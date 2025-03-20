@@ -1,0 +1,1 @@
+/home/leoul/Desktop/transport_share_app/build/app/intermediates/cxx/RelWithDebInfo/6h6og214/obj/arm64-v8a
