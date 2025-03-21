@@ -31,11 +31,18 @@ class SignupScreen extends StatelessWidget {
                 final email = _emailController.text.trim();
                 final password = _passwordController.text.trim();
 
+                if (email.isEmpty || password.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please fill all fields')),
+                  );
+                  return;
+                }
+
                 final user = await _authService.signUpWithEmail(email, password);
 
-                if (user != null) {
+                if (user != null && context.mounted) {
                   Navigator.pushReplacementNamed(context, '/home');
-                } else {
+                } else if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Signup failed')),
                   );
