@@ -4,6 +4,7 @@ import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/create_ride_screen.dart';
 import 'screens/ride_list_screen.dart';
+import 'screens/map_screen.dart'; // Import the MapScreen
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,7 @@ class MyApp extends StatelessWidget {
         '/signup': (context) => SignupScreen(), // Signup Screen
         '/home': (context) => RideListScreen(), // Home Screen (Ride List)
         '/create-ride': (context) => CreateRideScreen(), // Create Ride Screen
+        '/map': (context) => MapScreen(), // Map Screen
       },
     );
   }
