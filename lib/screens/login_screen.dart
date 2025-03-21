@@ -11,22 +11,62 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      appBar: AppBar(
+        title: const Text('Login'),
+        backgroundColor: Colors.deepPurple,
+        elevation: 5,
+      ),
+      body: Container(
+        padding: const EdgeInsets.all(20.0),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.deepPurple, Colors.purpleAccent],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
               controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: InputDecoration(
+                labelText: 'Email',
+                prefixIcon: const Icon(Icons.email, color: Colors.white70),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.2),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              style: const TextStyle(color: Colors.white),
             ),
+            const SizedBox(height: 15),
             TextField(
               controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
+              decoration: InputDecoration(
+                labelText: 'Password',
+                prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.2),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
               obscureText: true,
+              style: const TextStyle(color: Colors.white),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.deepPurple,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
               onPressed: () async {
                 if (!context.mounted) return;
 
@@ -43,13 +83,17 @@ class LoginScreen extends StatelessWidget {
                   );
                 }
               },
-              child: const Text('Login'),
+              child: const Text('Login', style: TextStyle(fontSize: 18)),
             ),
+            const SizedBox(height: 10),
             TextButton(
               onPressed: () {
                 Navigator.pushReplacementNamed(context, '/signup');
               },
-              child: const Text('Don\'t have an account? Sign up'),
+              child: const Text(
+                'Don\'t have an account? Sign up',
+                style: TextStyle(color: Colors.white70),
+              ),
             ),
           ],
         ),
@@ -57,4 +101,3 @@ class LoginScreen extends StatelessWidget {
     );
   }
 }
-     
