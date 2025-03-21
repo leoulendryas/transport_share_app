@@ -38,4 +38,19 @@ class AuthService {
   Future<void> signOut() async {
     await _auth.signOut();
   }
+
+  // Fetch the Firebase ID token and refresh it if needed
+  Future<String?> getFirebaseToken() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        // Refresh the token
+        return await user.getIdToken(true); // Force token refresh
+      } catch (e) {
+        print('Error getting token: $e');
+        return null;
+      }
+    }
+    return null;
+  }
 }
