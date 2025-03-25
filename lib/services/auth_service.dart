@@ -1,56 +1,89 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
-class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+class AuthService extends ChangeNotifier {
+  String? _token;
+  String? _userId;
+  String? get token => _token;
+  String? get userId => _userId;
+  bool get isAuthenticated => _token != null;
 
-  Future<User?> signUpWithEmail(String email, String password) async {
-    try {
-      UserCredential result = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return result.user;
-    } on FirebaseAuthException catch (e) {
-      print('Error signing up: ${e.message}');
-      return null;
-    } catch (e) {
-      print('Unexpected error: $e');
-      return null;
+  late final SharedPreferences _prefs;
+
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+    _token = _prefs.getString('token');
+    _userId = _prefs.getString('userId');
+    notifyListeners();
+  }
+
+  Future<void> register(String email, String password) async {
+    if (!_validateEmail(email)) {
+      throw Exception('Invalid email format');
+    }
+    if (!_validatePassword(password)) {
+      throw Exception('Password must be at least 6 characters long');
+    }
+
+    final response = await http.post(
+      Uri.parse('http://localhost:5000/register'),
+      body: jsonEncode({'email': email, 'password': password}),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode == 201) {
+      final data = jsonDecode(response.body);
+      _token = data['token'];
+      _userId = data['user']['id'].toString();
+      await _prefs.setString('token', _token!);
+      await _prefs.setString('userId', _userId!);
+      notifyListeners();
+    } else {
+      throw Exception('Registration failed: ${response.statusCode} - ${response.body}');
     }
   }
 
-  Future<User?> signInWithEmail(String email, String password) async {
-    try {
-      UserCredential result = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return result.user;
-    } on FirebaseAuthException catch (e) {
-      print('Error signing in: ${e.message}');
-      return null;
-    } catch (e) {
-      print('Unexpected error: $e');
-      return null;
+  Future<void> login(String email, String password) async {
+    if (!_validateEmail(email)) {
+      throw Exception('Invalid email format');
+    }
+    if (!_validatePassword(password)) {
+      throw Exception('Password must be at least 6 characters long');
+    }
+
+    final response = await http.post(
+      Uri.parse('http://localhost:5000/login'),
+      body: jsonEncode({'email': email, 'password': password}),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      _token = data['token'];
+      _userId = data['user']['id'].toString();
+      await _prefs.setString('token', _token!);
+      await _prefs.setString('userId', _userId!);
+      notifyListeners();
+    } else {
+      throw Exception('Login failed: ${response.statusCode} - ${response.body}');
     }
   }
 
-  Future<void> signOut() async {
-    await _auth.signOut();
+  Future<void> logout() async {
+    await _prefs.remove('token');
+    await _prefs.remove('userId');
+    _token = null;
+    _userId = null;
+    notifyListeners();
   }
 
-  // Fetch the Firebase ID token and refresh it if needed
-  Future<String?> getFirebaseToken() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      try {
-        // Refresh the token
-        return await user.getIdToken(true); // Force token refresh
-      } catch (e) {
-        print('Error getting token: $e');
-        return null;
-      }
-    }
-    return null;
+  bool _validateEmail(String email) {
+    return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
+  }
+
+  bool _validatePassword(String password) {
+    return password.length >= 6;
   }
 }
