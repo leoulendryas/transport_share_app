@@ -10,7 +10,7 @@ class RideListScreen extends StatefulWidget {
   const RideListScreen({super.key});
 
   @override
-  _RideListScreenState createState() => _RideListScreenState();
+  State<RideListScreen> createState() => _RideListScreenState();
 }
 
 class _RideListScreenState extends State<RideListScreen> {
@@ -24,6 +24,13 @@ class _RideListScreenState extends State<RideListScreen> {
     super.didChangeDependencies();
     _apiService = Provider.of<ApiService>(context, listen: false);
     _ridesFuture = _fetchRides();
+  }
+
+  @override
+  void dispose() {
+    _fromController.dispose();
+    _toController.dispose();
+    super.dispose();
   }
 
   Future<List<Ride>> _fetchRides() async {
@@ -57,91 +64,161 @@ class _RideListScreenState extends State<RideListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Available Rides',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          style: textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
         ),
-        elevation: 4,
-        backgroundColor: Colors.deepPurple,
+        centerTitle: true,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
+            icon: const Icon(Icons.add),
             onPressed: _navigateToCreateRide,
           ),
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // Search Card
             Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 1,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: _fromController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'From',
                           hintText: 'Start location',
                           border: InputBorder.none,
+                          prefixIcon: const Icon(Icons.location_on_outlined),
+                          filled: true,
+                          fillColor: colors.surface,
                         ),
+                        textInputAction: TextInputAction.next,
                       ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(Icons.arrow_forward, size: 18),
                     ),
                     Expanded(
                       child: TextField(
                         controller: _toController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'To',
                           hintText: 'Destination',
                           border: InputBorder.none,
+                          prefixIcon: const Icon(Icons.flag_outlined),
+                          filled: true,
+                          fillColor: colors.surface,
                         ),
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (_) => _search(),
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.search, color: Colors.deepPurple),
+                      icon: const Icon(Icons.search),
                       onPressed: _search,
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
+            // Ride List
             Expanded(
               child: FutureBuilder<List<Ride>>(
                 future: _ridesFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
                   }
                   if (snapshot.hasError) {
                     return Center(
-                      child: Text(
-                        'Error: ${snapshot.error}',
-                        style: const TextStyle(color: Colors.red, fontSize: 16),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: colors.error,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Failed to load rides',
+                            style: textTheme.bodyLarge?.copyWith(
+                              color: colors.error,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _ridesFuture = _fetchRides();
+                              });
+                            },
+                            child: const Text('Retry'),
+                          ),
+                        ],
                       ),
                     );
                   }
                   if (snapshot.data!.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'No rides available',
-                        style: TextStyle(fontSize: 16),
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.directions_car_outlined,
+                            size: 48,
+                            color: colors.onSurface.withOpacity(0.5),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No rides available',
+                            style: textTheme.bodyLarge?.copyWith(
+                              color: colors.onSurface.withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton(
+                            onPressed: _navigateToCreateRide,
+                            child: const Text('Create a Ride'),
+                          ),
+                        ],
                       ),
                     );
                   }
-                  return ListView.builder(
-                    itemCount: snapshot.data!.length,
-                    itemBuilder: (context, index) {
-                      final ride = snapshot.data![index];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: RideCard(
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      setState(() {
+                        _ridesFuture = _fetchRides();
+                      });
+                    },
+                    child: ListView.separated(
+                      itemCount: snapshot.data!.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final ride = snapshot.data![index];
+                        return RideCard(
                           ride: ride,
                           onTap: () => Navigator.push(
                             context,
@@ -149,9 +226,9 @@ class _RideListScreenState extends State<RideListScreen> {
                               builder: (context) => RideDetailScreen(ride: ride),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   );
                 },
               ),
@@ -160,9 +237,8 @@ class _RideListScreenState extends State<RideListScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.deepPurple,
-        child: const Icon(Icons.add, color: Colors.white),
         onPressed: _navigateToCreateRide,
+        child: const Icon(Icons.add),
       ),
     );
   }

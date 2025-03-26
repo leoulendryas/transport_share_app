@@ -13,7 +13,7 @@ class RideDetailScreen extends StatefulWidget {
   const RideDetailScreen({super.key, required this.ride});
 
   @override
-  _RideDetailScreenState createState() => _RideDetailScreenState();
+  State<RideDetailScreen> createState() => _RideDetailScreenState();
 }
 
 class _RideDetailScreenState extends State<RideDetailScreen> {
@@ -21,12 +21,12 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
   bool _isLoading = true;
   late ApiService _apiService;
   late AuthService _authService;
-  late Ride _ride; // Add a local ride state
+  late Ride _ride;
 
   @override
   void initState() {
     super.initState();
-    _ride = widget.ride; // Initialize _ride with widget.ride
+    _ride = widget.ride;
   }
 
   @override
@@ -40,7 +40,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
   Future<void> _checkParticipation() async {
     try {
       final userId = _authService.userId;
-      final isDriver = userId == _ride.driverId.toString(); // Use _ride instead of widget.ride
+      final isDriver = userId == _ride.driverId.toString();
       final isParticipant = await _apiService.checkRideParticipation(_ride.id.toString());
 
       setState(() {
@@ -49,47 +49,72 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error checking participation: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error checking participation: $e'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _joinRide() async {
     try {
-      // Check if the ride has available seats
       if (_ride.seatsAvailable <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This ride is full.')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This ride is full.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
         return;
       }
 
-      // Join the ride
       await _apiService.joinRide(_ride.id.toString());
 
-      // Create a new Ride object with updated seatsAvailable
       final updatedRide = _ride.copyWith(
         seatsAvailable: _ride.seatsAvailable - 1,
       );
 
-      // Update the UI and navigate to the chat page
-      setState(() {
-        _isParticipant = true;
-        _ride = updatedRide; // Update the local ride state
-      });
+      if (mounted) {
+        setState(() {
+          _isParticipant = true;
+          _ride = updatedRide;
+        });
 
-      // Navigate to the chat page
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ChatScreen(rideId: _ride.id.toString()),
-        ),
-      );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(rideId: _ride.id.toString()),
+          ),
+        );
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Successfully joined the ride!'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to join ride: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to join ride: $e'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -100,105 +125,183 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
             ? Colors.orange
             : Colors.red;
     return Chip(
-      label: Text(_ride.status.toString().split('.').last.toUpperCase()),
+      label: Text(
+        _ride.status.toString().split('.').last.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
       backgroundColor: color.withOpacity(0.2),
-      labelStyle: TextStyle(color: color),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
     );
   }
 
   Widget _buildCompanyChips(List<int> companyIds) {
-    // Replace this with actual company data fetched from the backend
-    final companies = companyIds.map((id) => 'Company $id').toList();
+    final companies = {
+      1: 'Uber',
+      2: 'Lyft',
+      3: 'Zyride',
+    };
     return Wrap(
       spacing: 8,
-      children: companies.map((company) {
+      children: companyIds.map((id) {
         return Chip(
-          label: Text(company),
-          backgroundColor: Colors.blue.withOpacity(0.2),
-          labelStyle: const TextStyle(color: Colors.blue),
+          label: Text(
+            companies[id] ?? 'Company $id',
+            style: const TextStyle(fontSize: 12),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+          labelStyle: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         );
       }).toList(),
     );
   }
 
+  Widget _buildDetailCard(IconData icon, String title, String value) {
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+        ),
+      ),
+      child: ListTile(
+        leading: Icon(icon, size: 24),
+        title: Text(title, style: Theme.of(context).textTheme.bodySmall),
+        subtitle: Text(
+          value,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: colors.primary),
+        ),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Ride to ${_ride.toAddress}'), // Use _ride instead of widget.ride
+        title: Text(
+          'Ride to ${_ride.toAddress.split(',').first}',
+          style: theme.textTheme.titleLarge,
+        ),
+        centerTitle: true,
+        elevation: 0,
         actions: [_buildStatusIndicator()],
       ),
       body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            ListTile(
-              title: const Text('From', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(_ride.fromAddress), // Use _ride instead of widget.ride
+            _buildDetailCard(
+              Icons.location_on_outlined,
+              'From',
+              _ride.fromAddress,
             ),
-            ListTile(
-              title: const Text('To', style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(_ride.toAddress), // Use _ride instead of widget.ride
+            _buildDetailCard(
+              Icons.flag_outlined,
+              'To',
+              _ride.toAddress,
             ),
-            ListTile(
-              title: const Text('Available Seats'),
-              trailing: Text('${_ride.seatsAvailable} / ${_ride.totalSeats}'), // Use _ride
+            _buildDetailCard(
+              Icons.people_outlined,
+              'Available Seats',
+              '${_ride.seatsAvailable} of ${_ride.totalSeats}',
             ),
             if (_ride.departureTime != null)
-              ListTile(
-                title: const Text('Departure Time'),
-                trailing: Text(DateFormat.yMd().add_jm().format(_ride.departureTime!)), // Use _ride
+              _buildDetailCard(
+                Icons.access_time_outlined,
+                'Departure Time',
+                DateFormat.yMMMd().add_jm().format(_ride.departureTime!),
               ),
-            ListTile(
-              title: const Text('Ride-Sharing Companies'),
-              subtitle: _buildCompanyChips(_ride.companyIds), // Use _ride
+            Card(
+              elevation: 0,
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(
+                  color: colors.outline.withOpacity(0.1),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ride-Sharing Companies',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildCompanyChips(_ride.companyIds),
+                  ],
+                ),
+              ),
             ),
-            const Divider(),
+            const SizedBox(height: 24),
             if (!_isParticipant && _ride.status == RideStatus.active)
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton(
-                  onPressed: _joinRide,
-                  child: const Text('Join Ride'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
+              ElevatedButton(
+                onPressed: _joinRide,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
+                child: const Text('Join Ride'),
               ),
             if (_ride.status == RideStatus.full)
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton(
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (context) => AgreementDialog(rideId: _ride.id.toString()), // Use _ride
-                  ),
-                  child: const Text('Review Agreement'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
+              ElevatedButton(
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (context) => AgreementDialog(rideId: _ride.id.toString()),
+                ),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
+                child: const Text('Review Agreement'),
               ),
             if (_isParticipant)
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: ElevatedButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(rideId: _ride.id.toString()), // Use _ride
-                    ),
-                  ),
-                  child: const Text('Open Group Chat'),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
+              ElevatedButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatScreen(rideId: _ride.id.toString()),
                   ),
                 ),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Open Group Chat'),
               ),
           ],
         ),

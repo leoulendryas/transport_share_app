@@ -9,7 +9,7 @@ class CreateRideScreen extends StatefulWidget {
   const CreateRideScreen({super.key});
 
   @override
-  _CreateRideScreenState createState() => _CreateRideScreenState();
+  State<CreateRideScreen> createState() => _CreateRideScreenState();
 }
 
 class _CreateRideScreenState extends State<CreateRideScreen> {
@@ -20,7 +20,8 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   DateTime? _selectedTime;
   late ApiService _apiService;
   late LocationService _locationService;
-  List<int> _selectedCompanies = []; // Track selected ride-sharing companies
+  List<int> _selectedCompanies = [];
+  bool _isSubmitting = false;
 
   @override
   void didChangeDependencies() {
@@ -29,45 +30,42 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
     _locationService = Provider.of<LocationService>(context, listen: false);
   }
 
+  @override
+  void dispose() {
+    _fromController.dispose();
+    _toController.dispose();
+    _seatsController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    setState(() => _isSubmitting = true);
+
     try {
-      // Get coordinates for "from" location
       final fromLocation = await _locationService.getCurrentLocation();
       final fromAddress = await _locationService.getAddressFromCoordinates(
         fromLocation.latitude,
         fromLocation.longitude,
       );
 
-      // Debugging: Print coordinates and address
-      print('From Location: ${fromLocation.latitude}, ${fromLocation.longitude}');
-      print('From Address: $fromAddress');
-
-      // Get coordinates for "to" location
       final toLocation = await _locationService.getCurrentLocation();
       final toAddress = await _locationService.getAddressFromCoordinates(
         toLocation.latitude,
         toLocation.longitude,
       );
 
-      // Debugging: Print coordinates and address
-      print('To Location: ${toLocation.latitude}, ${toLocation.longitude}');
-      print('To Address: $toAddress');
-
-      // Parse seats and ensure it's valid
       final seats = int.tryParse(_seatsController.text);
       if (seats == null || seats < 2) {
         throw Exception('Invalid number of seats');
       }
 
-      // Ensure departureTime is non-null
       final departureTime = _selectedTime ?? DateTime.now();
 
-      // Create the ride
       await _apiService.createRide(
-        fromAddress: fromAddress, // Explicitly a String
-        toAddress: toAddress, // Explicitly a String
+        fromAddress: fromAddress,
+        toAddress: toAddress,
         fromLat: fromLocation.latitude,
         fromLng: fromLocation.longitude,
         toLat: toLocation.latitude,
@@ -77,12 +75,30 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         companyIds: _selectedCompanies,
       );
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ride created successfully!'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to create ride: $e')),
+          SnackBar(
+            content: Text('Failed to create ride: $e'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
       }
     }
   }
@@ -105,9 +121,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
     }
   }
 
-  // Show a dialog to select ride-sharing companies
   Future<void> _selectCompanies() async {
-    // Replace this with actual company data fetched from the backend
     final companies = [
       {'id': 1, 'name': 'Uber'},
       {'id': 2, 'name': 'Lyft'},
@@ -117,92 +131,187 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
     final selected = await showDialog<List<int>>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Select Ride-Sharing Companies'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: companies.map((company) {
-              return CheckboxListTile(
-                title: Text(company['name'] as String),
-                value: _selectedCompanies.contains(company['id']),
-                onChanged: (value) {
-                  setState(() {
-                    if (value == true) {
-                      _selectedCompanies.add(company['id'] as int);
-                    } else {
-                      _selectedCompanies.remove(company['id']);
-                    }
-                  });
-                },
-              );
-            }).toList(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, _selectedCompanies),
-              child: const Text('Done'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Select Ride-Sharing Companies'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: companies.map((company) {
+                    return CheckboxListTile(
+                      title: Text(company['name'] as String),
+                      value: _selectedCompanies.contains(company['id']),
+                      onChanged: (value) {
+                        setState(() {
+                          if (value == true) {
+                            _selectedCompanies.add(company['id'] as int);
+                          } else {
+                            _selectedCompanies.remove(company['id']);
+                          }
+                        });
+                      },
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, _selectedCompanies),
+                  child: const Text('Done'),
+                ),
+              ],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            );
+          },
         );
       },
     );
 
-    if (selected != null) {
+    if (selected != null && mounted) {
       setState(() => _selectedCompanies = selected);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Ride')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      appBar: AppBar(
+        title: const Text('Create Ride'),
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const SizedBox(height: 8),
               TextFormField(
                 controller: _fromController,
-                decoration: const InputDecoration(labelText: 'From'),
+                decoration: InputDecoration(
+                  labelText: 'From',
+                  prefixIcon: const Icon(Icons.location_on_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: colors.surface,
+                ),
                 validator: (value) => value!.trim().isEmpty ? 'Required' : null,
+                textInputAction: TextInputAction.next,
               ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _toController,
-                decoration: const InputDecoration(labelText: 'To'),
+                decoration: InputDecoration(
+                  labelText: 'To',
+                  prefixIcon: const Icon(Icons.flag_outlined),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: colors.surface,
+                ),
                 validator: (value) => value!.trim().isEmpty ? 'Required' : null,
+                textInputAction: TextInputAction.next,
               ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _seatsController,
-                decoration: const InputDecoration(labelText: 'Seats'),
+                decoration: InputDecoration(
+                  labelText: 'Available Seats',
+                  prefixIcon: const Icon(Icons.people_outline),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: colors.surface,
+                ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (int.tryParse(value ?? '') == null) return 'Invalid number';
                   if (int.parse(value!) < 2) return 'Minimum 2 seats';
                   return null;
                 },
+                textInputAction: TextInputAction.next,
               ),
-              ListTile(
-                title: Text(_selectedTime == null
-                    ? 'Select Time (optional)'
-                    : 'Time: ${DateFormat.Hm().format(_selectedTime!)}'),
-                trailing: const Icon(Icons.access_time),
-                onTap: _selectTime,
-              ),
-              ListTile(
-                title: Text(_selectedCompanies.isEmpty
-                    ? 'Select Ride-Sharing Companies'
-                    : 'Selected: ${_selectedCompanies.join(', ')}'),
-                trailing: const Icon(Icons.directions_car),
-                onTap: _selectCompanies,
-              ),
-              const Spacer(),
-              ElevatedButton(
-                onPressed: _submit,
-                child: const Text('Create Ride'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
+              const SizedBox(height: 16),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: colors.outline.withOpacity(0.2),
+                  ),
                 ),
+                child: ListTile(
+                  leading: const Icon(Icons.access_time),
+                  title: Text(
+                    _selectedTime == null
+                        ? 'Select Departure Time'
+                        : 'Departure: ${DateFormat.Hm().format(_selectedTime!)}',
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: _selectTime,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(
+                    color: colors.outline.withOpacity(0.2),
+                  ),
+                ),
+                child: ListTile(
+                  leading: const Icon(Icons.directions_car),
+                  title: Text(
+                    _selectedCompanies.isEmpty
+                        ? 'Select Ride-Sharing Companies'
+                        : 'Companies: ${_selectedCompanies.length} selected',
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: _selectCompanies,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                onPressed: _isSubmitting ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Create Ride'),
               ),
             ],
           ),
