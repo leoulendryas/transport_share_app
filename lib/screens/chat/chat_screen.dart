@@ -12,22 +12,23 @@ class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key, required this.rideId});
 
   @override
-  _ChatScreenState createState() => _ChatScreenState();
+  State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
   late final WebSocketService _webSocketService;
   final _messageController = TextEditingController();
-  late final String _token; // Store the JWT token
+  late final String _token;
   late final ApiService _apiService;
   List<Message> _messages = [];
+  bool _isLoading = true;
+  final _scrollController = ScrollController();
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final authService = Provider.of<AuthService>(context, listen: false);
 
-    // Ensure the user is authenticated
     if (authService.token == null || authService.userId == null) {
       throw Exception('User is not authenticated');
     }
@@ -36,35 +37,67 @@ class _ChatScreenState extends State<ChatScreen> {
     _apiService = Provider.of<ApiService>(context, listen: false);
     _webSocketService = WebSocketService(
       rideId: widget.rideId,
-      token: _token, // Pass the JWT token
+      token: _token,
     );
 
-    // Fetch message history when the screen loads
-    _fetchMessageHistory();
+    _initializeChat();
   }
 
-  @override
-  void dispose() {
-    _webSocketService.dispose();
-    _messageController.dispose();
-    super.dispose();
-  }
-
-  // Fetch message history from the API
-  Future<void> _fetchMessageHistory() async {
+  Future<void> _initializeChat() async {
     try {
-      final messages = await _apiService.getMessages(widget.rideId);
-      setState(() {
-        _messages = messages;
-      });
+      await _fetchMessageHistory();
+      _webSocketService.messages.addListener(_handleNewMessage);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load message history: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error initializing chat: $e'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  // Send a message via WebSocket
+  void _handleNewMessage() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  Future<void> _fetchMessageHistory() async {
+    try {
+      final messages = await _apiService.getMessages(widget.rideId);
+      if (mounted) {
+        setState(() {
+          _messages = messages;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load message history: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   void _sendMessage() {
     final message = _messageController.text.trim();
     if (message.isEmpty) return;
@@ -73,58 +106,153 @@ class _ChatScreenState extends State<ChatScreen> {
       _webSocketService.sendMessage(message);
       _messageController.clear();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send message: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send message: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
   @override
+  void dispose() {
+    _webSocketService.messages.removeListener(_handleNewMessage);
+    _webSocketService.dispose();
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context); // Access AuthService here
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final authService = Provider.of<AuthService>(context);
+
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Group Chat'),
+          centerTitle: true,
+        ),
+        body: Center(
+          child: CircularProgressIndicator(color: colors.primary),
+        ),
+      );
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Group Chat')),
+      appBar: AppBar(
+        title: const Text('Group Chat'),
+        centerTitle: true,
+        elevation: 0,
+      ),
       body: Column(
         children: [
           Expanded(
             child: ValueListenableBuilder<List<Message>>(
               valueListenable: _webSocketService.messages,
               builder: (context, realTimeMessages, _) {
-                // Combine message history with real-time messages
                 final allMessages = [..._messages, ...realTimeMessages];
+                if (allMessages.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.forum_outlined,
+                          size: 48,
+                          color: colors.onSurface.withOpacity(0.5),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No messages yet',
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: colors.onSurface.withOpacity(0.7),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Send the first message!',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  );
+                }
 
                 return ListView.builder(
-                  reverse: true, // Show latest messages at the bottom
+                  controller: _scrollController,
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: allMessages.length,
                   itemBuilder: (context, index) {
                     final message = allMessages.reversed.toList()[index];
-                    return MessageBubble(
-                      message: message,
-                      isMe: message.userId == authService.userId, // Use authService here
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      child: MessageBubble(
+                        message: message,
+                        isMe: message.userId == authService.userId,
+                      ),
                     );
                   },
                 );
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              border: Border(
+                top: BorderSide(
+                  color: colors.outline.withOpacity(0.1),
+                ),
+              ),
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _messageController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'Type your message...',
-                      border: OutlineInputBorder(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: colors.surfaceVariant,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
+                    textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _sendMessage(),
+                    maxLines: 3,
+                    minLines: 1,
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _sendMessage,
+                const SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: colors.primary,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white),
+                    onPressed: _sendMessage,
+                  ),
                 ),
               ],
             ),
