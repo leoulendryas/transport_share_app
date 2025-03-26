@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 import '../../models/ride.dart';
 import '../../services/api_service.dart';
-import '../../services/location_service.dart';
 
 class CreateRideScreen extends StatefulWidget {
   const CreateRideScreen({super.key});
@@ -19,15 +20,17 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   final _seatsController = TextEditingController(text: '2');
   DateTime? _selectedTime;
   late ApiService _apiService;
-  late LocationService _locationService;
   List<int> _selectedCompanies = [];
   bool _isSubmitting = false;
+  
+  // Selected locations with coordinates
+  Location? _selectedFromLocation;
+  Location? _selectedToLocation;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _apiService = Provider.of<ApiService>(context, listen: false);
-    _locationService = Provider.of<LocationService>(context, listen: false);
   }
 
   @override
@@ -38,23 +41,77 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
     super.dispose();
   }
 
+  // Fetch location suggestions using geocoding
+  Future<List<Location>> _getLocationSuggestions(String query) async {
+    if (query.isEmpty) {
+      return [];
+    }
+
+    try {
+      List<Location> locations = [];
+      
+      // Search by address with Addis Ababa context
+      final placemarks = await locationFromAddress('$query, Addis Ababa');
+      locations.addAll(placemarks.map((p) => Location(
+        latitude: p.latitude,
+        longitude: p.longitude,
+        timestamp: DateTime.now(),
+      )));
+      
+      if (locations.length < 3) {
+        final morePlacemarks = await locationFromAddress(query);
+        locations.addAll(morePlacemarks.map((p) => Location(
+          latitude: p.latitude,
+          longitude: p.longitude,
+          timestamp: DateTime.now(),
+        )));
+      }
+      
+      return locations;
+    } catch (e) {
+      debugPrint('Error getting location suggestions: $e');
+      return [];
+    }
+  }
+
+  // Get display name for a location
+  Future<String> _getLocationName(Location location) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        location.latitude,
+        location.longitude,
+      );
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        return [
+          place.street,
+          place.subLocality,
+          place.locality,
+        ].where((part) => part != null && part.isNotEmpty).join(', ');
+      }
+      return '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}';
+    } catch (e) {
+      return '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}';
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedFromLocation == null || _selectedToLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select both locations'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
     try {
-      final fromLocation = await _locationService.getCurrentLocation();
-      final fromAddress = await _locationService.getAddressFromCoordinates(
-        fromLocation.latitude,
-        fromLocation.longitude,
-      );
-
-      final toLocation = await _locationService.getCurrentLocation();
-      final toAddress = await _locationService.getAddressFromCoordinates(
-        toLocation.latitude,
-        toLocation.longitude,
-      );
+      final fromAddress = await _getLocationName(_selectedFromLocation!);
+      final toAddress = await _getLocationName(_selectedToLocation!);
 
       final seats = int.tryParse(_seatsController.text);
       if (seats == null || seats < 2) {
@@ -66,10 +123,10 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
       await _apiService.createRide(
         fromAddress: fromAddress,
         toAddress: toAddress,
-        fromLat: fromLocation.latitude,
-        fromLng: fromLocation.longitude,
-        toLat: toLocation.latitude,
-        toLng: toLocation.longitude,
+        fromLat: _selectedFromLocation!.latitude,
+        fromLng: _selectedFromLocation!.longitude,
+        toLat: _selectedToLocation!.latitude,
+        toLng: _selectedToLocation!.longitude,
         seats: seats,
         departureTime: departureTime,
         companyIds: _selectedCompanies,
@@ -88,12 +145,12 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to create ride: $e'),
+            content: Text('Failed to create ride: ${e.toString()}'),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
-            ),
           ),
+        ),
         );
       }
     } finally {
@@ -198,34 +255,76 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 8),
-              TextFormField(
+              TypeAheadField<Location>(
                 controller: _fromController,
-                decoration: InputDecoration(
-                  labelText: 'From',
-                  prefixIcon: const Icon(Icons.location_on_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  filled: true,
-                  fillColor: colors.surface,
+                suggestionsCallback: _getLocationSuggestions,
+                itemBuilder: (context, location) => FutureBuilder<String>(
+                  future: _getLocationName(location),
+                  builder: (context, snapshot) {
+                    return ListTile(
+                      leading: const Icon(Icons.location_on),
+                      title: Text(snapshot.data ?? 'Loading...'),
+                    );
+                  },
                 ),
-                validator: (value) => value!.trim().isEmpty ? 'Required' : null,
-                textInputAction: TextInputAction.next,
+                onSelected: (Location location) async {
+                  _selectedFromLocation = location;
+                  _fromController.text = await _getLocationName(location);
+                },
+                builder: (context, controller, focusNode) {
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: 'From',
+                      prefixIcon: const Icon(Icons.location_on_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      filled: true,
+                      fillColor: colors.surface,
+                    ),
+                    validator: (value) => 
+                        value!.trim().isEmpty ? 'Required' : null,
+                    textInputAction: TextInputAction.next,
+                  );
+                },
               ),
               const SizedBox(height: 16),
-              TextFormField(
+              TypeAheadField<Location>(
                 controller: _toController,
-                decoration: InputDecoration(
-                  labelText: 'To',
-                  prefixIcon: const Icon(Icons.flag_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  filled: true,
-                  fillColor: colors.surface,
+                suggestionsCallback: _getLocationSuggestions,
+                itemBuilder: (context, location) => FutureBuilder<String>(
+                  future: _getLocationName(location),
+                  builder: (context, snapshot) {
+                    return ListTile(
+                      leading: const Icon(Icons.flag),
+                      title: Text(snapshot.data ?? 'Loading...'),
+                    );
+                  },
                 ),
-                validator: (value) => value!.trim().isEmpty ? 'Required' : null,
-                textInputAction: TextInputAction.next,
+                onSelected: (Location location) async {
+                  _selectedToLocation = location;
+                  _toController.text = await _getLocationName(location);
+                },
+                builder: (context, controller, focusNode) {
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: 'To',
+                      prefixIcon: const Icon(Icons.flag_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      filled: true,
+                      fillColor: colors.surface,
+                    ),
+                    validator: (value) => 
+                        value!.trim().isEmpty ? 'Required' : null,
+                    textInputAction: TextInputAction.next,
+                  );
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(

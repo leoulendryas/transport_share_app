@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 import '../../models/ride.dart';
 import '../../services/api_service.dart';
 import 'create_ride_screen.dart';
@@ -18,6 +20,10 @@ class _RideListScreenState extends State<RideListScreen> {
   final _toController = TextEditingController();
   late Future<List<Ride>> _ridesFuture;
   late ApiService _apiService;
+  
+  // Selected locations with coordinates
+  Location? _selectedFromLocation;
+  Location? _selectedToLocation;
 
   @override
   void didChangeDependencies() {
@@ -35,24 +41,82 @@ class _RideListScreenState extends State<RideListScreen> {
 
   Future<List<Ride>> _fetchRides() async {
     try {
-      // Fetch rides with geospatial filtering
-      final rides = await _apiService.getRides(
-        fromLat: 40.7128, // Replace with actual user location
-        fromLng: -74.0060,
-        toLat: 34.0522,
-        toLng: -118.2437,
-        radius: 5000,
-      );
-      return rides;
+      if (_selectedFromLocation != null && _selectedToLocation != null) {
+        final rides = await _apiService.getRides(
+          fromLat: _selectedFromLocation!.latitude,
+          fromLng: _selectedFromLocation!.longitude,
+          toLat: _selectedToLocation!.latitude,
+          toLng: _selectedToLocation!.longitude,
+          radius: 5000,
+        );
+        return rides;
+      }
+      return [];
     } catch (e) {
       throw Exception('Failed to fetch rides: $e');
     }
   }
 
+  // Fetch location suggestions using geocoding
+  Future<List<Location>> _getLocationSuggestions(String query) async {
+    if (query.isEmpty) {
+      return [];
+    }
+
+    try {
+      List<Location> locations = [];
+      
+      // Search by address with Addis Ababa context
+      final placemarks = await locationFromAddress('$query, Addis Ababa');
+      locations.addAll(placemarks.map((p) => Location(
+        latitude: p.latitude,
+        longitude: p.longitude,
+        timestamp: DateTime.now(), // Added required timestamp
+      )));
+      
+      if (locations.length < 3) {
+        final morePlacemarks = await locationFromAddress(query);
+        locations.addAll(morePlacemarks.map((p) => Location(
+          latitude: p.latitude,
+          longitude: p.longitude,
+          timestamp: DateTime.now(), // Added required timestamp
+        )));
+      }
+      
+      return locations;
+    } catch (e) {
+      debugPrint('Error getting location suggestions: $e');
+      return [];
+    }
+  }
+
+  // Get display name for a location
+  Future<String> _getLocationName(Location location) async {
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        location.latitude,
+        location.longitude,
+      );
+      if (placemarks.isNotEmpty) {
+        final place = placemarks.first;
+        return [
+          place.street,
+          place.subLocality,
+          place.locality,
+        ].where((part) => part != null && part.isNotEmpty).join(', ');
+      }
+      return '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}';
+    } catch (e) {
+      return '${location.latitude.toStringAsFixed(4)}, ${location.longitude.toStringAsFixed(4)}';
+    }
+  }
+
   void _search() {
-    setState(() {
-      _ridesFuture = _fetchRides();
-    });
+    if (_selectedFromLocation != null && _selectedToLocation != null) {
+      setState(() {
+        _ridesFuture = _fetchRides();
+      });
+    }
   }
 
   void _navigateToCreateRide() {
@@ -97,44 +161,88 @@ class _RideListScreenState extends State<RideListScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _fromController,
-                        decoration: InputDecoration(
-                          labelText: 'From',
-                          hintText: 'Start location',
-                          border: InputBorder.none,
-                          prefixIcon: const Icon(Icons.location_on_outlined),
-                          filled: true,
-                          fillColor: colors.surface,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TypeAheadField<Location>(
+                            controller: _fromController,
+                            suggestionsCallback: _getLocationSuggestions,
+                            itemBuilder: (context, location) => FutureBuilder<String>(
+                              future: _getLocationName(location),
+                              builder: (context, snapshot) {
+                                return ListTile(
+                                  leading: const Icon(Icons.location_on),
+                                  title: Text(snapshot.data ?? 'Loading...'),
+                                );
+                              },
+                            ),
+                            onSelected: (Location location) async {
+                              _selectedFromLocation = location;
+                              _fromController.text = await _getLocationName(location);
+                            },
+                            builder: (context, controller, focusNode) {
+                              return TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                decoration: InputDecoration(
+                                  labelText: 'From',
+                                  hintText: 'Start location',
+                                  border: InputBorder.none,
+                                  prefixIcon: const Icon(Icons.location_on_outlined),
+                                  filled: true,
+                                  fillColor: colors.surface,
+                                ),
+                                textInputAction: TextInputAction.next,
+                              );
+                            },
+                          ),
                         ),
-                        textInputAction: TextInputAction.next,
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Icon(Icons.arrow_forward, size: 18),
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _toController,
-                        decoration: InputDecoration(
-                          labelText: 'To',
-                          hintText: 'Destination',
-                          border: InputBorder.none,
-                          prefixIcon: const Icon(Icons.flag_outlined),
-                          filled: true,
-                          fillColor: colors.surface,
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Icon(Icons.arrow_forward, size: 18),
                         ),
-                        textInputAction: TextInputAction.search,
-                        onSubmitted: (_) => _search(),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.search),
-                      onPressed: _search,
+                        Expanded(
+                          child: TypeAheadField<Location>(
+                            controller: _toController,
+                            suggestionsCallback: _getLocationSuggestions,
+                            itemBuilder: (context, location) => FutureBuilder<String>(
+                              future: _getLocationName(location),
+                              builder: (context, snapshot) {
+                                return ListTile(
+                                  leading: const Icon(Icons.flag),
+                                  title: Text(snapshot.data ?? 'Loading...'),
+                                );
+                              },
+                            ),
+                            onSelected: (Location location) async {
+                              _selectedToLocation = location;
+                              _toController.text = await _getLocationName(location);
+                            },
+                            builder: (context, controller, focusNode) {
+                              return TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                decoration: InputDecoration(
+                                  labelText: 'To',
+                                  hintText: 'Destination',
+                                  border: InputBorder.none,
+                                  prefixIcon: const Icon(Icons.flag_outlined),
+                                  filled: true,
+                                  fillColor: colors.surface,
+                                ),
+                                textInputAction: TextInputAction.search,
+                                onSubmitted: (_) => _search(),
+                              );
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.search),
+                          onPressed: _search,
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -193,7 +301,9 @@ class _RideListScreenState extends State<RideListScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No rides available',
+                            _selectedFromLocation == null || _selectedToLocation == null
+                                ? 'Select both locations to search for rides'
+                                : 'No rides available',
                             style: textTheme.bodyLarge?.copyWith(
                               color: colors.onSurface.withOpacity(0.7),
                             ),
