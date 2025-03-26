@@ -1,63 +1,65 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/ride.dart'; // Remove unused import
+import '../../models/ride.dart';
+import 'company_chip.dart'; // Import the CompanyChip widget
 
 class RideCard extends StatelessWidget {
   final Ride ride;
   final VoidCallback onTap;
 
-  const RideCard({super.key, required this.ride, required this.onTap});
+  const RideCard({
+    super.key, 
+    required this.ride, 
+    required this.onTap
+  });
 
-  // Helper method to get status color based on ride status
   Color _getStatusColor(BuildContext context) {
-    // Convert ride.status (String) to RideStatus enum
     final status = RideStatus.values.firstWhere(
       (e) => e.toString().split('.').last == ride.status,
-      orElse: () => RideStatus.pending, // Default to pending if status is invalid
+      orElse: () => RideStatus.pending,
     );
 
+    final colors = Theme.of(context).colorScheme;
+    
     switch (status) {
-      case RideStatus.active:
-        return Theme.of(context).colorScheme.primary;
-      case RideStatus.full:
-        return Colors.orange;
-      case RideStatus.completed:
-        return Colors.green;
-      case RideStatus.canceled:
-        return Colors.red;
-      case RideStatus.pending:
-        return Colors.grey;
-      default:
-        return Colors.grey;
+      case RideStatus.active: return colors.primary;
+      case RideStatus.full: return colors.secondary;
+      case RideStatus.completed: return colors.tertiary;
+      case RideStatus.canceled: return colors.error;
+      case RideStatus.pending: return colors.outline;
+      default: return colors.outline;
     }
   }
 
-  // Helper method to display ride-sharing companies
   Widget _buildCompanies(List<int> companyIds) {
-    // Replace this with actual company data fetched from the backend
-    final companies = companyIds.map((id) => 'Company $id').join(', ');
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Text(
-        'Companies: $companies',
-        style: TextStyle(
-          color: Colors.grey[600],
-          fontSize: 14,
-        ),
-      ),
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: companyIds.map((id) => CompanyChip( // Now properly referencing the imported widget
+        companyName: 'Company $id',
+      )).toList(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      elevation: 2,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: colors.outline.withOpacity(0.2),
+        ),
+      ),
       child: InkWell(
+        borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -66,44 +68,49 @@ class RideCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '${ride.fromAddress} → ${ride.toAddress}',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      '${ride.fromAddress.split(',').first} → ${ride.toAddress.split(',').first}',
+                      style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Chip(
-                    label: Text(ride.status.toString().split('.').last.toUpperCase()), // Fix applied here
-                    backgroundColor: _getStatusColor(context).withOpacity(0.2),
-                    labelStyle: TextStyle(
-                      color: _getStatusColor(context),
-                      fontSize: 12,
-                    ),
+                  CompanyChip( // Now properly referencing the imported widget
+                    companyName: ride.status.toString().split('.').last.toUpperCase(),
+                    color: _getStatusColor(context),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text('Available seats: ${ride.seatsAvailable}'),
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  'Departs: ${DateFormat('MMM dd, yyyy - HH:mm').format(ride.departureTime)}',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.people_outline, size: 16, color: colors.onSurface.withOpacity(0.6)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${ride.seatsAvailable} of ${ride.totalSeats} seats',
+                    style: theme.textTheme.bodyMedium,
                   ),
-                ),
+                  const Spacer(),
+                  Icon(Icons.access_time, size: 16, color: colors.onSurface.withOpacity(0.6)),
+                  const SizedBox(width: 4),
+                  Text(
+                    DateFormat('MMM d, h:mm a').format(ride.departureTime),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
               ),
-              _buildCompanies(ride.companyIds), // Display ride-sharing companies
+              const SizedBox(height: 12),
+              _buildCompanies(ride.companyIds),
               const SizedBox(height: 12),
               LinearProgressIndicator(
                 value: (ride.totalSeats - ride.seatsAvailable) / ride.totalSeats,
-                backgroundColor: Colors.grey[200],
+                backgroundColor: colors.surfaceVariant,
                 valueColor: AlwaysStoppedAnimation<Color>(
                   _getStatusColor(context),
                 ),
                 minHeight: 6,
+                borderRadius: BorderRadius.circular(3),
               ),
             ],
           ),
