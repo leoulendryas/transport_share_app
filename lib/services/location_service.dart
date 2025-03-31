@@ -4,21 +4,29 @@ import 'package:geocoding/geocoding.dart';
 class LocationService {
   Future<Position> getCurrentLocation() async {
     await _checkPermissions();
-    return await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+    } catch (e) {
+      throw Exception('Failed to get current location: $e');
+    }
   }
 
   Future<String> getAddressFromCoordinates(double lat, double lng) async {
     try {
-      if (lat == null || lng == null) {
-        throw Exception('Invalid coordinates: latitude or longitude is null');
-      }
-
       final placemarks = await placemarkFromCoordinates(lat, lng);
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
-        return '${place.street}, ${place.locality}, ${place.country}';
+        return [
+          if (place.street != null) place.street,
+          if (place.locality != null) place.locality,
+          if (place.postalCode != null) place.postalCode,
+          if (place.country != null) place.country,
+        ].where((part) => part != null && part.isNotEmpty).join(', ');
       }
       return 'Unknown Location';
     } catch (e) {
@@ -26,10 +34,25 @@ class LocationService {
     }
   }
 
+  Future<Map<String, dynamic>> getCoordinatesFromAddress(String address) async {
+    try {
+      final locations = await locationFromAddress(address);
+      if (locations.isNotEmpty) {
+        return {
+          'latitude': locations.first.latitude,
+          'longitude': locations.first.longitude,
+        };
+      }
+      throw Exception('No location found for address');
+    } catch (e) {
+      throw Exception('Failed to get coordinates: $e');
+    }
+  }
+
   Future<void> _checkPermissions() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception('Location services are disabled');
+      throw Exception('Location services are disabled. Please enable them.');
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
@@ -41,7 +64,18 @@ class LocationService {
     }
 
     if (permission == LocationPermission.deniedForever) {
-      throw Exception('Location permissions are permanently denied');
+      throw Exception(
+        'Location permissions are permanently denied. Please enable them in app settings.'
+      );
     }
+  }
+
+  Stream<Position> getLocationStream() {
+    return Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // meters
+      ),
+    );
   }
 }
