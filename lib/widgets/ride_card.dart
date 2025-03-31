@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/ride.dart';
-import 'company_chip.dart'; // Import the CompanyChip widget
+import 'company_chip.dart';
+
+// Company mapping (could also be imported from a shared file)
+final Map<int, String> companies = {
+  1: 'Ride',
+  2: 'Zyride',
+  3: 'Feres',
+};
 
 class RideCard extends StatelessWidget {
   final Ride ride;
@@ -35,8 +42,8 @@ class RideCard extends StatelessWidget {
     return Wrap(
       spacing: 4,
       runSpacing: 4,
-      children: companyIds.map((id) => CompanyChip( // Now properly referencing the imported widget
-        companyName: 'Company $id',
+      children: companyIds.map((id) => CompanyChip(
+        companyName: companies[id] ?? 'Unknown', // Use mapped company name
       )).toList(),
     );
   }
@@ -76,7 +83,7 @@ class RideCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  CompanyChip( // Now properly referencing the imported widget
+                  CompanyChip(
                     companyName: ride.status.toString().split('.').last.toUpperCase(),
                     color: _getStatusColor(context),
                   ),
@@ -92,17 +99,26 @@ class RideCard extends StatelessWidget {
                     style: theme.textTheme.bodyMedium,
                   ),
                   const Spacer(),
-                  Icon(Icons.access_time, size: 16, color: colors.onSurface.withOpacity(0.6)),
-                  const SizedBox(width: 4),
-                  Text(
-                    DateFormat('MMM d, h:mm a').format(ride.departureTime),
-                    style: theme.textTheme.bodyMedium,
-                  ),
+                  if (ride.departureTime != null) ...[
+                    Icon(Icons.access_time, size: 16, color: colors.onSurface.withOpacity(0.6)),
+                    const SizedBox(width: 4),
+                    Text(
+                      DateFormat('MMM d, h:mm a').format(ride.departureTime!),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ] else ...[
+                    Text(
+                      'No departure time',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurface.withOpacity(0.6)),
+                    ),
+                  ]
                 ],
               ),
               const SizedBox(height: 12),
-              _buildCompanies(ride.companyIds),
-              const SizedBox(height: 12),
+              if (ride.companyIds.isNotEmpty) ...[
+                _buildCompanies(ride.companyIds),
+                const SizedBox(height: 12),
+              ],
               LinearProgressIndicator(
                 value: (ride.totalSeats - ride.seatsAvailable) / ride.totalSeats,
                 backgroundColor: colors.surfaceVariant,
