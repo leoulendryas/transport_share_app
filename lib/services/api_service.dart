@@ -1,27 +1,39 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import '../models/ride.dart';
-import '../models/message.dart';
-import '../models/sos_alert.dart';
 import '../models/user.dart';
+import '../models/message.dart';
 import 'auth_service.dart';
+import '../models/lat_lng.dart';
+
+class ApiException implements Exception {
+  final String message;
+  final int statusCode;
+
+  ApiException(this.message, this.statusCode);
+
+  @override
+  String toString() => 'ApiException: $message (Status: $statusCode)';
+}
 
 class ApiService {
-  final String baseUrl = 'http://localhost:5000'; // Ensure this is correct
+  final String baseUrl = 'http://localhost:5000'; // Update with your backend URL
   final AuthService authService;
 
   ApiService(this.authService);
 
   Future<Map<String, String>> _getHeaders() async {
-    final token = authService.token;
+    final token = await authService.token;
     return {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
     };
   }
 
-  // Fetch rides with geospatial filtering
-  Future<List<Ride>> getRides({
+  // Enhanced ride fetching with pagination support
+  Future<Map<String, dynamic>> getRides({
     required double fromLat,
     required double fromLng,
     required double toLat,
@@ -33,7 +45,7 @@ class ApiService {
   }) async {
     try {
       final headers = await _getHeaders();
-      final uri = Uri.parse('$baseUrl/rides').replace(queryParameters: {
+      final queryParams = {
         'from_lat': fromLat.toString(),
         'from_lng': fromLng.toString(),
         'to_lat': toLat.toString(),
@@ -42,75 +54,86 @@ class ApiService {
         'page': page.toString(),
         'limit': limit.toString(),
         if (companyId != null) 'company_id': companyId.toString(),
-      });
+      };
+
+      final uri = Uri.parse('$baseUrl/rides').replace(queryParameters: queryParams);
       final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return (data['results'] as List)
-            .map((ride) => Ride.fromJson(ride))
-            .toList();
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data; // Return raw JSON without converting to Ride objects here
+      } else {
+        final errorData = jsonDecode(response.body) as Map<String, dynamic>;
+        throw ApiException(
+          errorData['error'] ?? 'Failed to load rides',
+          response.statusCode,
+        );
       }
-      throw Exception('Failed to load rides: ${response.body}');
+    } on http.ClientException catch (e) {
+      throw ApiException('Network error: ${e.message}', 0);
+    } on FormatException catch (e) {
+      throw ApiException('Data parsing error: ${e.message}', 0);
     } catch (e) {
-      throw Exception('Network error: $e');
+      throw ApiException('Unexpected error: ${e.toString()}', 0);
     }
   }
 
-  // Fetch ride details by ID
-  Future<Ride> getRideDetails(String rideId) async {
-    try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/rides/$rideId'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        return Ride.fromJson(jsonDecode(response.body));
-      }
-      throw Exception('Failed to load ride details: ${response.body}');
-    } catch (e) {
-      throw Exception('Network error: $e');
-    }
-  }
-
-  // Create a new ride
   Future<Ride> createRide({
+    required LatLng from,
+    required LatLng to,
     required String fromAddress,
     required String toAddress,
-    required double fromLat,
-    required double fromLng,
-    required double toLat,
-    required double toLng,
     required int seats,
-    required DateTime departureTime,
-    required List<int> companyIds,
+    required DateTime? departureTime, // Nullable
+    required List<int> companies,
   }) async {
-    final headers = await _getHeaders();
-    final response = await http.post(
-      Uri.parse('$baseUrl/rides'),
-      headers: headers,
-      body: jsonEncode({
+    try {
+      if (seats < 1 || seats > 8) {
+        throw ApiException('Seats must be between 1 and 8', 400);
+      }
+  
+      // Ensure departureTime is either null or in the future
+      if (departureTime != null && departureTime.isBefore(DateTime.now())) {
+        throw ApiException('Departure time must be in the future', 400);
+      }
+  
+      final headers = await _getHeaders();
+      
+      // Construct request body
+      final requestBody = {
+        'from': {'lat': from.latitude, 'lng': from.longitude},
+        'to': {'lat': to.latitude, 'lng': to.longitude},
+        'seats': seats,
         'from_address': fromAddress,
         'to_address': toAddress,
-        'from_lat': fromLat,
-        'from_lng': fromLng,
-        'to_lat': toLat,
-        'to_lng': toLng,
-        'seats': seats,
-        'departure_time': departureTime.toIso8601String(),
-        'companies': companyIds,
-      }),
-    );
-
-    if (response.statusCode == 201) {
-      return Ride.fromJson(jsonDecode(response.body));
+        'companies': companies,
+      };
+  
+      // Only include departure_time if it's not null
+      if (departureTime != null) {
+        requestBody['departure_time'] = departureTime.toIso8601String();
+      }
+  
+      final response = await http.post(
+        Uri.parse('$baseUrl/rides'),
+        headers: headers,
+        body: jsonEncode(requestBody),
+      );
+  
+      if (response.statusCode == 201) {
+        return Ride.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      } else {
+        throw ApiException(
+          'Failed to create ride: ${response.body}',
+          response.statusCode,
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Network error: $e', 0);
     }
-    throw Exception('Failed to create ride: ${response.body}');
   }
 
-  // Join a ride
   Future<void> joinRide(String rideId) async {
     try {
       final headers = await _getHeaders();
@@ -120,14 +143,54 @@ class ApiService {
       );
 
       if (response.statusCode != 200) {
-        throw Exception('Failed to join ride: ${response.body}');
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to join ride',
+          response.statusCode,
+        );
       }
     } catch (e) {
-      throw Exception('Network error: $e');
+      throw ApiException('Network error: $e', 0);
     }
   }
 
-  // Fetch messages for a ride
+  Future<void> leaveRide(String rideId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/rides/$rideId/leave'),
+        headers: headers,
+      );
+
+      if (response.statusCode != 200) {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to leave ride',
+          response.statusCode,
+        );
+      }
+    } catch (e) {
+      throw ApiException('Network error: $e', 0);
+    }
+  }
+
+  Future<void> cancelRide(String rideId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/rides/$rideId/cancel'),
+        headers: headers,
+      );
+
+      if (response.statusCode != 200) {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to cancel ride',
+          response.statusCode,
+        );
+      }
+    } catch (e) {
+      throw ApiException('Network error: $e', 0);
+    }
+  }
+
   Future<List<Message>> getMessages(String rideId) async {
     try {
       final headers = await _getHeaders();
@@ -138,37 +201,46 @@ class ApiService {
 
       if (response.statusCode == 200) {
         return (jsonDecode(response.body) as List)
-            .map((msg) => Message.fromJson(msg))
+            .map((msg) => Message.fromJson(msg as Map<String, dynamic>))
             .toList();
+      } else {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to load messages',
+          response.statusCode,
+        );
       }
-      throw Exception('Failed to load messages: ${response.body}');
     } catch (e) {
-      throw Exception('Network error: $e');
+      throw ApiException('Network error: $e', 0);
     }
   }
 
-  // Send a message in a ride
   Future<Message> sendMessage(String rideId, String content) async {
     try {
+      if (content.isEmpty || content.length > 500) {
+        throw ApiException('Message must be between 1 and 500 characters', 400);
+      }
+
       final headers = await _getHeaders();
       final response = await http.post(
         Uri.parse('$baseUrl/rides/$rideId/messages'),
         headers: headers,
-        body: jsonEncode({
-          'content': content,
-        }),
+        body: jsonEncode({'content': content}),
       );
 
       if (response.statusCode == 200) {
-        return Message.fromJson(jsonDecode(response.body));
+        return Message.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      } else {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to send message',
+          response.statusCode,
+        );
       }
-      throw Exception('Failed to send message: ${response.body}');
     } catch (e) {
-      throw Exception('Network error: $e');
+      if (e is ApiException) rethrow;
+      throw ApiException('Network error: $e', 0);
     }
   }
 
-  // Send an SOS alert
   Future<void> sendSos(String rideId, double lat, double lng) async {
     try {
       final headers = await _getHeaders();
@@ -176,22 +248,68 @@ class ApiService {
         Uri.parse('$baseUrl/sos'),
         headers: headers,
         body: jsonEncode({
-          'rideId': rideId,
+          'ride_id': rideId,
           'latitude': lat,
           'longitude': lng,
         }),
       );
 
       if (response.statusCode != 201) {
-        throw Exception('Failed to send SOS: ${response.body}');
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to send SOS',
+          response.statusCode,
+        );
       }
     } catch (e) {
-      throw Exception('Network error: $e');
+      throw ApiException('Network error: $e', 0);
     }
   }
 
-  // Check if the user is participating in a ride
-  Future<bool> checkRideParticipation(String rideId) async {
+  // In your ApiService class
+  Future<Ride> getRideDetails(String rideId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/rides/$rideId'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        return Ride.fromJson(data);
+      } else {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to load ride details',
+          response.statusCode,
+        );
+      }
+    } catch (e) {
+      throw ApiException('Network error: $e', 0);
+    }
+  }
+
+  Future<Map<String, dynamic>> checkRideParticipation(String rideId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/rides/$rideId/check-participation'),
+        headers: headers,
+      );
+  
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to check participation',
+          response.statusCode,
+        );
+      }
+    } catch (e) {
+      throw ApiException('Network error: $e', 0);
+    }
+  }
+
+  Future<List<User>> getRideParticipants(String rideId) async {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
@@ -200,29 +318,80 @@ class ApiService {
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['isParticipant'] ?? false;
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => User.fromJson(json)).toList();
+      } else {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to load participants',
+          response.statusCode,
+        );
       }
-      throw Exception('Failed to check participation: ${response.body}');
     } catch (e) {
-      throw Exception('Network error: $e');
+      throw ApiException('Network error: $e', 0);
     }
   }
 
-  // Send an agreement for a ride
-  Future<void> sendAgreement(String rideId) async {
+  Future<Map<String, dynamic>> getUserProfile() async {
     try {
       final headers = await _getHeaders();
-      final response = await http.post(
-        Uri.parse('$baseUrl/rides/$rideId/agree'),
+      final response = await http.get(
+        Uri.parse('$baseUrl/profile'),
         headers: headers,
       );
 
-      if (response.statusCode != 200) {
-        throw Exception('Failed to send agreement: ${response.body}');
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to load profile',
+          response.statusCode,
+        );
       }
     } catch (e) {
-      throw Exception('Network error: $e');
+      throw ApiException('Network error: $e', 0);
+    }
+  }
+
+  Future<List<dynamic>> getCompanies() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/companies'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List;
+      } else {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to load companies',
+          response.statusCode,
+        );
+      }
+    } catch (e) {
+      throw ApiException('Network error: $e', 0);
+    }
+  }
+
+  Future<String> refreshToken(String refreshToken) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/refresh-token'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': refreshToken}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['token'] as String;
+      } else {
+        throw ApiException(
+          jsonDecode(response.body)['error'] ?? 'Failed to refresh token',
+          response.statusCode,
+        );
+      }
+    } catch (e) {
+      throw ApiException('Network error: $e', 0);
     }
   }
 }
