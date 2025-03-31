@@ -1,14 +1,11 @@
-class Location {
-  final String name;
-  final double lat;
-  final double lng;
+class LocationWithName {
+  final double latitude;
+  final double longitude;
+  final String displayName;
 
-  Location({
-    required this.name,
-    required this.lat,
-    required this.lng,
+  const LocationWithName({
+    required this.latitude,
+    required this.longitude,
+    required this.displayName,
   });
-
-  @override
-  String toString() => 'Location(name: $name, lat: $lat, lng: $lng)';
 }
