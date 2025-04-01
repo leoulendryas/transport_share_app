@@ -34,7 +34,7 @@ class AuthService extends ChangeNotifier {
     }
 
     final response = await http.post(
-      Uri.parse('$_baseUrl/register'),
+      Uri.parse('$_baseUrl/auth/register'),
       body: jsonEncode({
         'email': email,
         'password': password
@@ -55,7 +55,7 @@ class AuthService extends ChangeNotifier {
     }
 
     final response = await http.post(
-      Uri.parse('$_baseUrl/login'),
+      Uri.parse('$_baseUrl/auth/login'),
       body: jsonEncode({
         'email': email,
         'password': password
@@ -73,7 +73,7 @@ class AuthService extends ChangeNotifier {
     }
 
     final response = await http.post(
-      Uri.parse('$_baseUrl/refresh-token'),
+      Uri.parse('$_baseUrl/auth/refresh-token'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'refreshToken': _refreshToken}),
     );
