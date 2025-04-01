@@ -1,13 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/message.dart';
 import '../../models/ride.dart';
-import '../../models/user.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
-import '../../services/websocket_service.dart';
+import '../../services/websocket_service.dart' as ws;
 import '../../widgets/message_bubble.dart';
 import '../../widgets/connection_status_bar.dart';
 import '../../widgets/participants_chip.dart';
@@ -27,122 +25,29 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  late WebSocketService _webSocketService;
-  final _messageController = TextEditingController();
-  late final ApiService _apiService;
+  late ws.WebSocketService _webSocketService;
   late final AuthService _authService;
-  List<Message> _messageHistory = [];
+  late final ApiService _apiService;
+  
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _messageFocusNode = FocusNode();
+  
+  List<Message> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
-  final _scrollController = ScrollController();
-  final FocusNode _messageFocusNode = FocusNode();
-  Timer? _typingTimer;
-  bool _isTyping = false;
-  final Set<String> _typingParticipants = {};
   bool _isRideActive = true;
+  Timer? _typingTimer;
   final Map<String, String> _participantEmails = {};
+  final Map<String, String> _participantNames = {};
+  StreamSubscription? _connectionErrorSubscription;
 
   @override
   void initState() {
     super.initState();
-    _initializeServices();
-    _initializeChat();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final authService = Provider.of<AuthService>(context, listen: false);
-    if (_authService != authService) {
-      _authService = authService;
-      if (!_isLoading) _initializeChat();
-    }
-  }
-
-  void _initializeServices() {
     _authService = Provider.of<AuthService>(context, listen: false);
     _apiService = Provider.of<ApiService>(context, listen: false);
-    
-    if (_authService.token == null) {
-      throw Exception('User is not authenticated');
-    }
-
-    _webSocketService = WebSocketService(
-      rideId: widget.rideId,
-      token: _authService.token!,
-    );
-  }
-
-  Future<void> _initializeChat() async {
-    try {
-      await _fetchMessageHistory();
-      await _loadParticipantEmails();
-      _setupWebSocketListeners();
-      await _checkRideStatus();
-    } catch (e) {
-      _showErrorSnackbar('Error initializing chat: ${e.toString()}');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _loadParticipantEmails() async {
-    try {
-      final participants = await _apiService.getRideParticipants(widget.rideId);
-      for (final user in participants) {
-        _participantEmails[user.id] = user.email;
-      }
-      // Add current user if not already in list
-      if (!_participantEmails.containsKey(_authService.userId)) {
-        _participantEmails[_authService.userId!] = _authService.email ?? 'You';
-      }
-    } catch (e) {
-      debugPrint('Error loading participant emails: $e');
-    }
-  }
-
-  void _setupWebSocketListeners() {
-    _webSocketService.messages.addListener(_handleNewMessages);
-    _webSocketService.isConnected.addListener(_handleConnectionChange);
-    _webSocketService.participantsCount.addListener(_handleParticipantsUpdate);
-  }
-
-  void _handleNewMessages() {
-    if (mounted) {
-      setState(() {});
-      _scrollToBottom();
-    }
-  }
-
-  void _handleConnectionChange() {
-    if (mounted) {
-      setState(() {});
-      if (_webSocketService.isConnected.value) {
-        _showSuccessSnackbar('Reconnected to chat');
-      }
-    }
-  }
-
-  void _handleParticipantsUpdate() {
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _checkRideStatus() async {
-    try {
-      final ride = await _apiService.getRideDetails(widget.rideId);
-      if (mounted) {
-        setState(() {
-          _isRideActive = ride.status == RideStatus.active;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error checking ride status: $e');
-      if (mounted) {
-        setState(() => _isRideActive = false);
-      }
-    }
+    _initializeChat();
   }
 
   Future<void> _fetchMessageHistory() async {
@@ -150,7 +55,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final messages = await _apiService.getMessages(widget.rideId);
       if (mounted) {
         setState(() {
-          _messageHistory = messages;
+          _messages = messages;
         });
         _scrollToBottom();
       }
@@ -161,11 +66,126 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _setupWebSocketListeners() {
+    _webSocketService.messages.addListener(_updateMessages);
+    _webSocketService.connectionState.addListener(_handleConnectionChange);
+    _webSocketService.typingUsers.addListener(_handleTypingUsersChange);
+    _webSocketService.participantsCount.addListener(_updateParticipantsCount);
+  }
+
+  Future<void> _initializeChat() async {
+   try {
+     // Ensure only base URL is passed
+     _webSocketService = ws.WebSocketService(
+       rideId: widget.rideId,
+       token: _authService.token!,
+       baseUrl: 'ws://localhost:5000',
+     );
+
+     await Future.wait([
+       _loadParticipants(),
+       _checkRideStatus(),
+       _fetchMessageHistory(), // Load message history when initializing
+     ]);
+
+     _setupWebSocketListeners();
+
+     _webSocketService.connectionError.addListener(() {
+       if (_webSocketService.connectionError.value != null && mounted) {
+         _showErrorSnackbar(_webSocketService.connectionError.value!);
+       }
+     });
+
+     if (mounted) {
+       setState(() => _isLoading = false);
+     }
+   } catch (e, stackTrace) {
+     debugPrint('Error initializing chat: $e\n$stackTrace');
+     if (mounted) {
+       _showErrorSnackbar('Failed to initialize chat');
+       setState(() => _isLoading = false);
+     }
+   }
+  }
+
+  void _updateMessages() {
+    if (!mounted) return;
+    
+    setState(() {
+      _messages = _webSocketService.messages.value;
+    });
+    _scrollToBottom();
+  }
+
+  void _handleConnectionChange() {
+    if (!mounted) return;
+    
+    final state = _webSocketService.connectionState.value;
+    if (state == ws.ConnectionState.connected) {
+      _showSuccessSnackbar('Connected to chat');
+    } else if (state == ws.ConnectionState.error) {
+      _showErrorSnackbar('Connection error');
+    }
+    
+    setState(() {});
+  }
+
+  void _handleTypingUsersChange() {
+    if (mounted) setState(() {});
+  }
+
+  void _updateParticipantsCount() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadParticipants() async {
+    try {
+      final participation = await _apiService.checkRideParticipation(widget.rideId);
+      final userId = _authService.userId;
+      
+      if (userId != null) {
+        _participantEmails[userId] = _authService.email ?? '';
+        _participantNames[userId] = 'You';
+      }
+      
+      if (participation['participants'] != null) {
+        for (final participant in participation['participants']) {
+          final id = participant['id'] as String;
+          _participantEmails[id] = participant['email'] as String;
+          _participantNames[id] = participant['name'] as String? ?? participant['email'] as String;
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error loading participants: $e\n$stackTrace');
+      final userId = _authService.userId;
+      if (userId != null) {
+        _participantEmails[userId] = _authService.email ?? '';
+        _participantNames[userId] = 'You';
+      }
+    }
+  }
+
+  Future<void> _checkRideStatus() async {
+    try {
+      final ride = await _apiService.getRideDetails(widget.rideId);
+      if (mounted) {
+        setState(() {
+          _isRideActive = ride.status == RideStatus.active;
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error checking ride status: $e\n$stackTrace');
+      if (mounted) {
+        setState(() => _isRideActive = false);
+      }
+    }
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (_scrollController.hasClients && _messages.isNotEmpty) {
         _scrollController.animateTo(
-          _scrollController.position.minScrollExtent,
+          _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -174,58 +194,37 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _handleTyping() {
-    if (!_webSocketService.isConnected.value) return;
-
-    if (!_isTyping) {
-      _isTyping = true;
-      _sendTypingStatus(true);
+    if (_webSocketService.connectionState.value != ws.ConnectionState.connected) return;
+  
+    if (_typingTimer == null || !_typingTimer!.isActive) {
+      _webSocketService.sendTypingStatus(true);
     }
-
+  
     _typingTimer?.cancel();
     _typingTimer = Timer(const Duration(seconds: 3), () {
-      _isTyping = false;
-      _sendTypingStatus(false);
+      _webSocketService.sendTypingStatus(false);
     });
   }
 
-  void _sendTypingStatus(bool isTyping) {
-    try {
-      _webSocketService.sendMessage(jsonEncode({
-        'type': isTyping ? 'typing_start' : 'typing_end',
-        'userId': _authService.userId,
-      }));
-    } catch (e) {
-      debugPrint('Error sending typing status: $e');
-    }
-  }
-
   Future<void> _sendMessage() async {
-    final message = _messageController.text.trim();
-    if (message.isEmpty || _isSending || !_isRideActive) return;
+    final text = _messageController.text.trim();
+    if (text.isEmpty || _isSending || !_isRideActive) return;
 
     setState(() => _isSending = true);
 
     try {
-      await _webSocketService.sendMessage(jsonEncode({
-        'type': 'message',
-        'content': message,
-        'userId': _authService.userId,
-        'timestamp': DateTime.now().toIso8601String(),
-      }));
+      _typingTimer?.cancel();
+      final userId = _authService.userId;
+      if (userId != null && _webSocketService.typingUsers.value.contains(userId)) {
+        _webSocketService.sendTypingStatus(false);
+      }
+
+      await _webSocketService.sendMessage(text);
       _messageController.clear();
-      if (mounted) {
-        _messageFocusNode.requestFocus();
-      }
-      if (_isTyping) {
-        _isTyping = false;
-        _typingTimer?.cancel();
-        _sendTypingStatus(false);
-      }
-    } catch (e) {
-      if (mounted) {
-        _showErrorSnackbar('Failed to send message: ${e.toString()}');
-      }
-      await _sendMessageViaHttp(message);
+      _messageFocusNode.requestFocus();
+    } catch (e, stackTrace) {
+      debugPrint('Error sending message: $e\n$stackTrace');
+      _showErrorSnackbar('Failed to send message');
     } finally {
       if (mounted) {
         setState(() => _isSending = false);
@@ -233,41 +232,36 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _sendMessageViaHttp(String message) async {
-    try {
-      await _apiService.sendMessage(widget.rideId, message);
-      if (mounted) {
-        await _fetchMessageHistory();
-      }
-    } catch (e) {
-      if (mounted) {
-        _showErrorSnackbar('Failed to send message via HTTP: ${e.toString()}');
-      }
-    }
-  }
-
   Future<void> _reconnect() async {
     try {
       await _webSocketService.reconnect();
-    } catch (e) {
-      if (mounted) {
-        _showErrorSnackbar('Reconnection failed: ${e.toString()}');
-      }
+    } catch (e, stackTrace) {
+      debugPrint('Reconnection failed: $e\n$stackTrace');
+      _showErrorSnackbar('Reconnection failed');
     }
   }
 
   void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Theme.of(context).colorScheme.error,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'Retry',
+          textColor: Colors.white,
+          onPressed: _reconnect,
+        ),
       ),
     );
   }
 
   void _showSuccessSnackbar(String message) {
+    if (!mounted) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -284,17 +278,19 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
     _messageFocusNode.dispose();
     _typingTimer?.cancel();
-    _webSocketService.messages.removeListener(_handleNewMessages);
-    _webSocketService.isConnected.removeListener(_handleConnectionChange);
-    _webSocketService.participantsCount.removeListener(_handleParticipantsUpdate);
+    _connectionErrorSubscription?.cancel();
+    _webSocketService.messages.removeListener(_updateMessages);
+    _webSocketService.connectionState.removeListener(_handleConnectionChange);
+    _webSocketService.typingUsers.removeListener(_handleTypingUsersChange);
+    _webSocketService.participantsCount.removeListener(_updateParticipantsCount);
     _webSocketService.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentUserId = _authService.userId;
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     if (_isLoading) {
       return Scaffold(
@@ -307,35 +303,40 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
             const Text('Group Chat'),
             if (widget.rideDetails != null)
               Text(
                 '${widget.rideDetails!.fromAddress} → ${widget.rideDetails!.toAddress}',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onPrimary.withAlpha(204), // 0.8 * 255
+                  color: colorScheme.onPrimary.withAlpha((0.8 * 255).toInt()),
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
           ],
         ),
         actions: [
           ParticipantsChip(
             count: _webSocketService.participantsCount.value + 1,
-            onPressed: () => _showParticipantsDialog(),
+            onPressed: _showParticipantsDialog,
           ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: Icon(
-              _webSocketService.isConnected.value ? Icons.wifi : Icons.wifi_off,
-              color: _webSocketService.isConnected.value 
-                  ? Colors.green 
-                  : Colors.red,
-            ),
-            onPressed: _webSocketService.isConnected.value ? null : _reconnect,
-            tooltip: _webSocketService.isConnected.value 
-                ? 'Connected' 
-                : 'Disconnected - Tap to retry',
+          ValueListenableBuilder<ws.ConnectionState>(
+            valueListenable: _webSocketService.connectionState,
+            builder: (context, state, _) {
+              return IconButton(
+                icon: Icon(
+                  state == ws.ConnectionState.connected 
+                    ? Icons.wifi 
+                    : Icons.wifi_off,
+                  color: state == ws.ConnectionState.connected 
+                    ? Colors.green 
+                    : Colors.red,
+                ),
+                onPressed: state == ws.ConnectionState.connected ? null : _reconnect,
+                tooltip: _getConnectionTooltip(state),
+              );
+            },
           ),
         ],
       ),
@@ -347,36 +348,11 @@ class _ChatScreenState extends State<ChatScreen> {
               onRetry: _reconnect,
             ),
           if (!_isRideActive)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              color: Colors.orange,
-              child: Center(
-                child: Text(
-                  'This ride has ended',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          if (_typingParticipants.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${_typingParticipants.map((id) => _participantEmails[id] ?? 'Someone').join(', ')} '
-                  '${_typingParticipants.length > 1 ? 'are' : 'is'} typing...',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withAlpha(153), // 0.6 * 255
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            ),
+            _buildRideEndedBanner(),
+          if (_webSocketService.typingUsers.value.isNotEmpty)
+            _buildTypingIndicator(),
           Expanded(
-            child: _buildMessageList(currentUserId),
+            child: _buildMessageList(),
           ),
           if (_isRideActive) _buildMessageInput(),
         ],
@@ -384,39 +360,43 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageList(String? userId) {
-    final wsMessages = _webSocketService.messages.value.whereType<Map<String, dynamic>>().map((msg) {
-      try {
-        if (msg['type'] == 'typing_start') {
-          final typingUserId = msg['userId'] as String?;
-          if (typingUserId != null) {
-            _typingParticipants.add(typingUserId);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) setState(() {});
-            });
-          }
-          return null;
-        } else if (msg['type'] == 'typing_end') {
-          final typingUserId = msg['userId'] as String?;
-          if (typingUserId != null) {
-            _typingParticipants.remove(typingUserId);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) setState(() {});
-            });
-          }
-          return null;
-        }
-        return Message.fromJson(msg);
-      } catch (e) {
-        debugPrint('Error processing message: $e');
-        return null;
-      }
-    }).whereType<Message>().toList();
+  Widget _buildRideEndedBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      color: Colors.orange,
+      child: Center(
+        child: Text(
+          'This ride has ended',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
 
-    final allMessages = [..._messageHistory, ...wsMessages]
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  Widget _buildTypingIndicator() {
+    final typingUsers = _webSocketService.typingUsers.value;
+    final typingNames = typingUsers.map((id) => _participantNames[id] ?? 'Someone');
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          '${typingNames.join(', ')} ${typingNames.length > 1 ? 'are' : 'is'} typing...',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ),
+    );
+  }
 
-    if (allMessages.isEmpty) {
+  Widget _buildMessageList() {
+    if (_messages.isEmpty) {
       return Center(
         child: Text(
           'No messages yet. Start the conversation!',
@@ -429,13 +409,15 @@ class _ChatScreenState extends State<ChatScreen> {
       controller: _scrollController,
       reverse: true,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: allMessages.length,
+      itemCount: _messages.length,
       itemBuilder: (context, index) {
-        final message = allMessages.reversed.toList()[index];
+        final message = _messages.reversed.toList()[index];
+
         return MessageBubble(
+          key: ValueKey(message.id),
           message: message,
-          isMe: message.userId == userId,
-          senderEmail: _participantEmails[message.userId] ?? 'Unknown',
+          isMe: message.userId == _authService.userId,
+          senderEmail: _participantEmails[message.userId] ?? 'Unknown', // ✅ Fixed: senderEmail is now included
         );
       },
     );
@@ -483,33 +465,49 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  String _getConnectionTooltip(ws.ConnectionState state) {
+    switch (state) {
+      case ws.ConnectionState.connected:
+        return 'Connected';
+      case ws.ConnectionState.connecting:
+        return 'Connecting...';
+      case ws.ConnectionState.reconnecting:
+        return 'Reconnecting...';
+      case ws.ConnectionState.error:
+        return 'Connection error - Tap to retry';
+      case ws.ConnectionState.disconnected:
+        return 'Disconnected - Tap to connect';
+    }
+  }
+
   Future<void> _showParticipantsDialog() async {
     try {
-      final participants = await _apiService.getRideParticipants(widget.rideId);
+      final participation = await _apiService.checkRideParticipation(widget.rideId);
       if (!mounted) return;
-
-      showDialog(
+  
+      final participants = participation['participants'] as List<dynamic>? ?? [];
+      final driverId = participation['driverId'] as String? ?? widget.rideDetails?.driverId;
+  
+      await showDialog(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Participants'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: participants.map((user) => ListTile(
-                leading: CircleAvatar(
-                  child: Text(
-                    user.email.isNotEmpty 
-                      ? user.email[0].toUpperCase() 
-                      : '?'
+              children: [
+                if (!participants.any((p) => p['id'] == _authService.userId))
+                  _buildParticipantTile(
+                    _authService.email ?? 'You',
+                    _authService.email ?? '',
+                    _authService.userId == driverId,
                   ),
-                ),
-                title: Text(user.email),
-                subtitle: Text(
-                  user.id == widget.rideDetails?.driverId
-                    ? 'Driver' 
-                    : 'Passenger'
-                ),
-              )).toList(),
+                ...participants.map((user) => _buildParticipantTile(
+                  user['name'] as String? ?? user['email'] as String,
+                  user['email'] as String,
+                  user['id'] == driverId,
+                )),
+              ],
             ),
           ),
           actions: [
@@ -520,10 +518,21 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error showing participants dialog: $e\n$stackTrace');
       if (mounted) {
-        _showErrorSnackbar('Failed to load participants: ${e.toString()}');
+        _showErrorSnackbar('Failed to load participants');
       }
     }
+  }
+
+  Widget _buildParticipantTile(String name, String email, bool isDriver) {
+    return ListTile(
+      leading: CircleAvatar(
+        child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
+      ),
+      title: Text(name),
+      subtitle: Text('${isDriver ? 'Driver' : 'Passenger'} • $email'),
+    );
   }
 }
