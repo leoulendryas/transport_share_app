@@ -48,3 +48,4 @@ app.*.map.json
 # Gradle files
 android/.gradle/
 
+android/.gradle/
