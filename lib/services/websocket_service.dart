@@ -1,9 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import '../models/message.dart';
+
+enum ConnectionState {
+  disconnected,
+  connecting,
+  connected,
+  error,
+  reconnecting,
+}
 
 class WebSocketService {
   WebSocketChannel? _channel;
@@ -11,12 +20,13 @@ class WebSocketService {
   final String token;
   final String baseUrl;
   
-  // State management
-  final ValueNotifier<bool> isConnected = ValueNotifier(false);
+  // Connection state management
+  final ValueNotifier<ConnectionState> connectionState = 
+      ValueNotifier(ConnectionState.disconnected);
   final ValueNotifier<List<Message>> messages = ValueNotifier([]);
   final ValueNotifier<String?> connectionError = ValueNotifier(null);
   final ValueNotifier<int> participantsCount = ValueNotifier(0);
-  final ValueNotifier<bool> isParticipant = ValueNotifier(false);
+  final ValueNotifier<Set<String>> typingUsers = ValueNotifier({});
   
   // Connection management
   bool _isDisposing = false;
@@ -26,26 +36,41 @@ class WebSocketService {
   Timer? _pongTimeoutTimer;
   int _reconnectAttempts = 0;
   DateTime? _lastPongReceived;
-  
-  // Constants
-  static const int _maxReconnectAttempts = 5;
-  static const Duration _reconnectInterval = Duration(seconds: 2);
-  static const Duration _connectionTimeout = Duration(seconds: 5);
-  static const Duration _pingInterval = Duration(seconds: 20); // Less than backend's 25s
-  static const Duration _pongTimeout = Duration(seconds: 10);
   final Completer<void> _disposeCompleter = Completer<void>();
+  
+  // Configuration
+  static const int _maxReconnectAttempts = 5;
+  static const Duration _initialReconnectDelay = Duration(seconds: 1);
+  static const Duration _maxReconnectDelay = Duration(seconds: 30);
+  static const Duration _connectionTimeout = Duration(seconds: 10);
+  static const Duration _pingInterval = Duration(seconds: 20);
+  static const Duration _pongTimeout = Duration(seconds: 10);
+  static const Duration _typingTimeout = Duration(seconds: 3);
 
-  WebSocketService({
+  factory WebSocketService({
+    required String rideId,
+    required String token,
+    required String baseUrl,
+  }) {
+    final service = WebSocketService._internal(
+      rideId: rideId,
+      token: token,
+      baseUrl: baseUrl,
+    );
+    service.connect();
+    return service;
+  }
+
+  WebSocketService._internal({
     required this.rideId,
     required this.token,
-    this.baseUrl = 'ws://localhost:5000',
-  }) {
-    connect();
-  }
+    required this.baseUrl,
+  });
 
   Future<void> connect() async {
     if (_isDisposing) return;
     
+    connectionState.value = ConnectionState.connecting;
     connectionError.value = null;
     _cancelPendingReconnect();
 
@@ -72,9 +97,7 @@ class WebSocketService {
         cancelOnError: true,
       );
 
-      isConnected.value = true;
-      _reconnectAttempts = 0;
-      _startPingTimer();
+      _onConnected();
       debugPrint('WebSocket connected successfully');
     } on TimeoutException catch (e) {
       debugPrint('Connection timeout: $e');
@@ -82,10 +105,17 @@ class WebSocketService {
     } on WebSocketChannelException catch (e) {
       debugPrint('WebSocket error: $e');
       _handleError(e);
-    } catch (e) {
-      debugPrint('Unexpected connection error: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Unexpected connection error: $e\n$stackTrace');
       _handleError(e);
     }
+  }
+
+  void _onConnected() {
+    connectionState.value = ConnectionState.connected;
+    _reconnectAttempts = 0;
+    _startPingTimer();
+    _lastPongReceived = DateTime.now();
   }
 
   void _startPingTimer() {
@@ -93,87 +123,129 @@ class WebSocketService {
     _pongTimeoutTimer?.cancel();
     
     _pingTimer = Timer.periodic(_pingInterval, (_) {
-      if (_channel != null && isConnected.value && !_isDisposing) {
-        try {
-          _channel!.sink.add(jsonEncode({
-            'type': 'ping',
-            'timestamp': DateTime.now().millisecondsSinceEpoch
-          }));
-          debugPrint('Sent ping to server');
-          
-          _pongTimeoutTimer?.cancel();
-          _pongTimeoutTimer = Timer(_pongTimeout, () {
-            if (_lastPongReceived == null || 
-                DateTime.now().difference(_lastPongReceived!) > _pongTimeout) {
-              debugPrint('Pong timeout - forcing reconnect');
-              _handleError('Pong timeout');
-            }
-          });
-        } catch (e) {
-          debugPrint('Ping failed: $e');
-          _handleError(e);
-        }
+      if (_shouldSendPing()) {
+        _sendPing();
       }
     });
+  }
+
+  bool _shouldSendPing() {
+    return _channel != null && 
+           connectionState.value == ConnectionState.connected && 
+           !_isDisposing;
+  }
+
+  void _sendPing() {
+    try {
+      _channel!.sink.add(jsonEncode({
+        'type': 'ping',
+        'timestamp': DateTime.now().millisecondsSinceEpoch
+      }));
+      debugPrint('Sent ping to server');
+      
+      _pongTimeoutTimer?.cancel();
+      _pongTimeoutTimer = Timer(_pongTimeout, () {
+        if (_lastPongReceived == null || 
+            DateTime.now().difference(_lastPongReceived!) > _pongTimeout) {
+          debugPrint('Pong timeout - forcing reconnect');
+          _handleError('Pong timeout');
+        }
+      });
+    } catch (e) {
+      debugPrint('Ping failed: $e');
+      _handleError(e);
+    }
   }
 
   void _handleMessage(dynamic message) {
     if (_isDisposing) return;
     
     try {
-      debugPrint('Received message: $message');
+      debugPrint('Received raw message: $message');
       
-      // Handle raw WebSocket pong frames
       if (message == '\u0003') {
         _handlePong();
         return;
+      }
+      
+      final decoded = _parseMessage(message);
+      if (decoded == null) return;
+
+      _processMessageByType(decoded);
+    } catch (e, stackTrace) {
+      debugPrint('Message handling error: $e\n$stackTrace');
+      connectionError.value = 'Failed to process message';
+    }
+  }
+
+  Map<String, dynamic>? _parseMessage(dynamic message) {
+    try {
+      if (message is! String) {
+        throw FormatException('Expected string message');
       }
       
       final decoded = jsonDecode(message);
       if (decoded is! Map<String, dynamic>) {
         throw FormatException('Expected JSON object');
       }
-
-      // Convert backend field names to frontend format
-      if (decoded.containsKey('user_id')) {
-        decoded['userId'] = decoded['user_id'];
-        decoded.remove('user_id');
-      }
-      if (decoded.containsKey('created_at')) {
-        decoded['timestamp'] = decoded['created_at'];
-        decoded.remove('created_at');
-      }
-
-      // Handle message types
-      switch (decoded['type']) {
-        case 'pong':
-          _handlePong();
-          break;
-        case 'connection_established':
-          isParticipant.value = true;
-          break;
-        case 'participant_joined':
-          participantsCount.value = (participantsCount.value ?? 0) + 1;
-          break;
-        case 'participant_left':
-          participantsCount.value = (participantsCount.value ?? 0) - 1;
-          break;
-        case 'ride_cancelled':
-          connectionError.value = 'Ride has been cancelled';
-          dispose();
-          break;
-        case 'message':
-          messages.value = [...messages.value, Message.fromJson(decoded)];
-          break;
-        case 'error':
-          connectionError.value = decoded['message'] ?? 'WebSocket error';
-          break;
-        default:
-          debugPrint('Unknown message type: ${decoded['type']}');
-      }
+      
+      return decoded;
     } catch (e) {
-      debugPrint('Message parsing error: $e');
-      connectionError.value = 'Failed to parse message: ${e.toString()}';
+      debugPrint('Message parsing failed: $e');
+      return null;
+    }
+  }
+
+  void _processMessageByType(Map<String, dynamic> message) {
+    final type = message['type']?.toString()?.toLowerCase() ?? '';
+    
+    switch (type) {
+      case 'pong':
+        _handlePong();
+        break;
+        
+      case 'ping':
+        _respondToPing();
+        break;
+        
+      case 'history':
+        _handleHistoryMessage(message);
+        break;
+        
+      case 'message':
+        _handleChatMessage(message);
+        break;
+
+      case 'typing_start':
+        _handleTypingStart(message);
+        break;
+
+      case 'typing_end':
+        _handleTypingEnd(message);
+        break;
+        
+      case 'connection_established':
+        debugPrint('Connection established');
+        break;
+        
+      case 'participant_joined':
+        _handleParticipantChange(1);
+        break;
+        
+      case 'participant_left':
+        _handleParticipantChange(-1);
+        break;
+        
+      case 'ride_cancelled':
+        _handleRideCancelled(message);
+        break;
+        
+      case 'error':
+        _handleErrorMessage(message);
+        break;
+        
+      default:
+        debugPrint('Unknown message type: $type');
     }
   }
 
@@ -183,12 +255,120 @@ class WebSocketService {
     _pongTimeoutTimer?.cancel();
   }
 
+  void _respondToPing() {
+    try {
+      _channel?.sink.add(jsonEncode({
+        'type': 'pong',
+        'timestamp': DateTime.now().millisecondsSinceEpoch
+      }));
+    } catch (e) {
+      debugPrint('Failed to respond to ping: $e');
+    }
+  }
+
+  void _handleHistoryMessage(Map<String, dynamic> message) {
+    try {
+      final historyMessages = (message['messages'] as List?)
+          ?.map((msg) => _parseHistoryMessage(msg))
+          .whereType<Message>()
+          .toList() ?? [];
+      
+      messages.value = historyMessages;
+    } catch (e, stackTrace) {
+      debugPrint('Failed to parse history: $e\n$stackTrace');
+      connectionError.value = 'Failed to load message history';
+    }
+  }
+
+  Message? _parseHistoryMessage(Map<String, dynamic> msg) {
+    try {
+      final normalized = Map<String, dynamic>.from(msg);
+      
+      if (msg['content'] is String) {
+        try {
+          final contentJson = jsonDecode(msg['content']);
+          if (contentJson is Map<String, dynamic>) {
+            normalized.addAll(contentJson);
+          }
+        } catch (_) {}
+      }
+      
+      if (msg.containsKey('user_id')) {
+        normalized['userId'] = msg['user_id'];
+      }
+      if (msg.containsKey('created_at')) {
+        normalized['timestamp'] = msg['created_at'];
+      }
+      
+      return Message.fromJson(normalized);
+    } catch (e) {
+      debugPrint('Failed to parse history message: $e');
+      return null;
+    }
+  }
+
+  void _handleChatMessage(Map<String, dynamic> message) {
+    try {
+      final normalized = Map<String, dynamic>.from(message);
+      
+      if (message['content'] is String) {
+        try {
+          final contentJson = jsonDecode(message['content']);
+          if (contentJson is Map<String, dynamic>) {
+            normalized.addAll(contentJson);
+          }
+        } catch (_) {}
+      }
+      
+      final newMessage = Message.fromJson(normalized);
+      messages.value = [...messages.value, newMessage];
+    } catch (e, stackTrace) {
+      debugPrint('Failed to parse chat message: $e\n$stackTrace');
+    }
+  }
+
+  void _handleTypingStart(Map<String, dynamic> message) {
+    try {
+      final userId = message['userId']?.toString();
+      if (userId != null) {
+        typingUsers.value = {...typingUsers.value, userId};
+        Timer(_typingTimeout, () => _handleTypingEnd(message));
+      }
+    } catch (e) {
+      debugPrint('Error handling typing start: $e');
+    }
+  }
+
+  void _handleTypingEnd(Map<String, dynamic> message) {
+    try {
+      final userId = message['userId']?.toString();
+      if (userId != null) {
+        typingUsers.value = {...typingUsers.value}..remove(userId);
+      }
+    } catch (e) {
+      debugPrint('Error handling typing end: $e');
+    }
+  }
+
+  void _handleParticipantChange(int delta) {
+    participantsCount.value = (participantsCount.value ?? 0) + delta;
+  }
+
+  void _handleRideCancelled(Map<String, dynamic> message) {
+    connectionError.value = message['reason'] ?? 'Ride has been cancelled';
+    dispose();
+  }
+
+  void _handleErrorMessage(Map<String, dynamic> message) {
+    connectionError.value = message['message'] ?? 'WebSocket error';
+  }
+
   void _handleError(dynamic error) {
     if (_isDisposing) return;
     
     debugPrint('WebSocket error: ${error.toString()}');
     connectionError.value = error.toString();
-    isConnected.value = false;
+    connectionState.value = ConnectionState.error;
     _scheduleReconnect();
   }
 
@@ -196,7 +376,7 @@ class WebSocketService {
     if (_isDisposing) return;
     
     debugPrint('WebSocket connection closed');
-    isConnected.value = false;
+    connectionState.value = ConnectionState.disconnected;
     _scheduleReconnect();
   }
 
@@ -211,14 +391,23 @@ class WebSocketService {
     _reconnectAttempts++;
     _cancelPendingReconnect();
     
-    final delay = _reconnectInterval * _reconnectAttempts;
+    final delay = _calculateReconnectDelay();
     debugPrint('Scheduling reconnect in ${delay.inSeconds} seconds (attempt $_reconnectAttempts/$_maxReconnectAttempts)');
     
+    connectionState.value = ConnectionState.reconnecting;
     _reconnectTimer = Timer(delay, connect);
   }
 
+  Duration _calculateReconnectDelay() {
+    final baseDelay = _initialReconnectDelay * pow(2, _reconnectAttempts - 1);
+    final jitter = Duration(milliseconds: Random().nextInt(1000));
+    return baseDelay + jitter < _maxReconnectDelay 
+        ? baseDelay + jitter 
+        : _maxReconnectDelay;
+  }
+
   Future<void> sendMessage(String content) async {
-    if (_isDisposing || _channel == null || !isConnected.value) {
+    if (_isDisposing || _channel == null || connectionState.value != ConnectionState.connected) {
       throw Exception('Cannot send message - WebSocket not connected');
     }
 
@@ -241,20 +430,34 @@ class WebSocketService {
     }
   }
 
+  void sendTypingStatus(bool isTyping) {
+    if (_isDisposing || _channel == null || connectionState.value != ConnectionState.connected) return;
+
+    try {
+      final message = jsonEncode({
+        'type': isTyping ? 'typing_start' : 'typing_end',
+        'timestamp': DateTime.now().toIso8601String()
+      });
+      _channel!.sink.add(message);
+    } catch (e) {
+      debugPrint('Error sending typing status: $e');
+    }
+  }
+
   Future<void> reconnect() async {
-    if (isConnected.value) return;
+    if (connectionState.value == ConnectionState.connected) return;
     _reconnectAttempts = 0;
     await connect();
   }
 
   Future<void> dispose() async {
     if (_isDisposing) return _disposeCompleter.future;
-    
+
     _isDisposing = true;
     _cancelPendingReconnect();
     _pingTimer?.cancel();
     _pongTimeoutTimer?.cancel();
-    isConnected.value = false;
+    connectionState.value = ConnectionState.disconnected;
 
     try {
       await _subscription?.cancel();
@@ -262,26 +465,39 @@ class WebSocketService {
         await _closeChannelSafely();
       }
       messages.dispose();
-      isConnected.dispose();
+      connectionState.dispose();
       connectionError.dispose();
       participantsCount.dispose();
-      isParticipant.dispose();
-    } catch (e) {
-      debugPrint('Disposal error: $e');
+      typingUsers.dispose();
+    } catch (e, stackTrace) {
+      debugPrint('Disposal error: $e\n$stackTrace');
     } finally {
-      _disposeCompleter.complete();
+      if (!_disposeCompleter.isCompleted) {
+        _disposeCompleter.complete();
+      }
     }
 
     return _disposeCompleter.future;
   }
 
   Future<void> _closeChannelSafely() async {
+    if (_channel == null) return;
+  
     try {
       await _channel!.sink.close(ws_status.goingAway)
           .timeout(const Duration(seconds: 2));
     } catch (e) {
       debugPrint('Error closing channel: $e');
-      try { _channel!.sink.close(); } catch (_) {}
+      try {
+        // Check if the channel is still open before attempting to close it
+        if (_channel != null) {
+          _channel!.sink.close(); 
+        }
+      } catch (_) {
+        // If there's an error closing, suppress it.
+      }
+    } finally {
+      _channel = null; // Nullify after closing
     }
   }
 
