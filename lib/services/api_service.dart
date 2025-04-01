@@ -195,7 +195,7 @@ class ApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/rides/$rideId/messages'),
+        Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
         headers: headers,
       );
 
@@ -222,7 +222,7 @@ class ApiService {
 
       final headers = await _getHeaders();
       final response = await http.post(
-        Uri.parse('$baseUrl/rides/$rideId/messages'),
+        Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
         headers: headers,
         body: jsonEncode({'content': content}),
       );
@@ -301,28 +301,6 @@ class ApiService {
       } else {
         throw ApiException(
           jsonDecode(response.body)['error'] ?? 'Failed to check participation',
-          response.statusCode,
-        );
-      }
-    } catch (e) {
-      throw ApiException('Network error: $e', 0);
-    }
-  }
-
-  Future<List<User>> getRideParticipants(String rideId) async {
-    try {
-      final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/rides/$rideId/participants'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => User.fromJson(json)).toList();
-      } else {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to load participants',
           response.statusCode,
         );
       }
