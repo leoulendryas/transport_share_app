@@ -9,6 +9,7 @@ import '../../services/websocket_service.dart' as ws;
 import '../../widgets/message_bubble.dart';
 import '../../widgets/connection_status_bar.dart';
 import '../../widgets/participants_chip.dart';
+import '../../widgets/glass_card.dart';
 
 class ChatScreen extends StatefulWidget {
   final String rideId;
@@ -75,7 +76,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initializeChat() async {
    try {
-     // Ensure only base URL is passed
      _webSocketService = ws.WebSocketService(
        rideId: widget.rideId,
        token: _authService.token!,
@@ -85,7 +85,7 @@ class _ChatScreenState extends State<ChatScreen> {
      await Future.wait([
        _loadParticipants(),
        _checkRideStatus(),
-       _fetchMessageHistory(), // Load message history when initializing
+       _fetchMessageHistory(),
      ]);
 
      _setupWebSocketListeners();
@@ -247,9 +247,9 @@ class _ChatScreenState extends State<ChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Theme.of(context).colorScheme.error,
+        backgroundColor: Colors.black,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         action: SnackBarAction(
           label: 'Retry',
           textColor: Colors.white,
@@ -265,9 +265,14 @@ class _ChatScreenState extends State<ChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.green,
+        backgroundColor: Colors.purple[800],
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        action: SnackBarAction(
+          label: 'OK',
+          textColor: Colors.white,
+          onPressed: () {},
+        ),
       ),
     );
   }
@@ -289,33 +294,46 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     if (_isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Group Chat')),
-        body: const Center(child: CircularProgressIndicator()),
+        backgroundColor: Colors.black,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Colors.purple,
+          ),
+        ),
       );
     }
 
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Group Chat'),
+            const Text(
+              'Group Chat',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             if (widget.rideDetails != null)
               Text(
                 '${widget.rideDetails!.fromAddress} → ${widget.rideDetails!.toAddress}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onPrimary.withAlpha((0.8 * 255).toInt()),
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 12,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
           ],
         ),
+        centerTitle: false,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           ParticipantsChip(
             count: _webSocketService.participantsCount.value + 1,
@@ -340,22 +358,34 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_webSocketService.connectionError.value != null)
-            ConnectionStatusBar(
-              message: _webSocketService.connectionError.value!,
-              onRetry: _reconnect,
-            ),
-          if (!_isRideActive)
-            _buildRideEndedBanner(),
-          if (_webSocketService.typingUsers.value.isNotEmpty)
-            _buildTypingIndicator(),
-          Expanded(
-            child: _buildMessageList(),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black,
+              Colors.purple[900]!,
+            ],
           ),
-          if (_isRideActive) _buildMessageInput(),
-        ],
+        ),
+        child: Column(
+          children: [
+            if (_webSocketService.connectionError.value != null)
+              ConnectionStatusBar(
+                message: _webSocketService.connectionError.value!,
+                onRetry: _reconnect,
+              ),
+            if (!_isRideActive)
+              _buildRideEndedBanner(),
+            if (_webSocketService.typingUsers.value.isNotEmpty)
+              _buildTypingIndicator(),
+            Expanded(
+              child: _buildMessageList(),
+            ),
+            if (_isRideActive) _buildMessageInput(),
+          ],
+        ),
       ),
     );
   }
@@ -367,7 +397,7 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Center(
         child: Text(
           'This ride has ended',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
@@ -386,8 +416,8 @@ class _ChatScreenState extends State<ChatScreen> {
         alignment: Alignment.centerLeft,
         child: Text(
           '${typingNames.join(', ')} ${typingNames.length > 1 ? 'are' : 'is'} typing...',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.6),
             fontStyle: FontStyle.italic,
           ),
         ),
@@ -400,7 +430,9 @@ class _ChatScreenState extends State<ChatScreen> {
       return Center(
         child: Text(
           'No messages yet. Start the conversation!',
-          style: Theme.of(context).textTheme.bodyLarge,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.8),
+          ),
         ),
       );
     }
@@ -417,7 +449,7 @@ class _ChatScreenState extends State<ChatScreen> {
           key: ValueKey(message.id),
           message: message,
           isMe: message.userId == _authService.userId,
-          senderEmail: _participantEmails[message.userId] ?? 'Unknown', // ✅ Fixed: senderEmail is now included
+          senderEmail: _participantEmails[message.userId] ?? 'Unknown',
         );
       },
     );
@@ -425,42 +457,55 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildMessageInput() {
     return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _messageController,
-              focusNode: _messageFocusNode,
-              enabled: !_isSending,
-              decoration: InputDecoration(
-                hintText: 'Type your message...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+      padding: const EdgeInsets.all(16.0),
+      child: GlassCard(
+        color: Colors.black,
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _messageController,
+                  focusNode: _messageFocusNode,
+                  enabled: !_isSending,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Type your message...',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[900],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  onChanged: (_) => _handleTyping(),
+                  onSubmitted: (_) => _sendMessage(),
+                  maxLines: 3,
+                  minLines: 1,
                 ),
               ),
-              onChanged: (_) => _handleTyping(),
-              onSubmitted: (_) => _sendMessage(),
-              maxLines: 3,
-              minLines: 1,
-            ),
+              const SizedBox(width: 8),
+              _isSending
+                  ? const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(
+                        color: Colors.purple,
+                      ),
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.send),
+                      onPressed: _sendMessage,
+                      color: Colors.purple,
+                    ),
+            ],
           ),
-          const SizedBox(width: 8),
-          _isSending
-              ? const Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: CircularProgressIndicator(),
-                )
-              : IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _sendMessage,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-        ],
+        ),
       ),
     );
   }
@@ -491,7 +536,11 @@ class _ChatScreenState extends State<ChatScreen> {
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Participants'),
+          backgroundColor: Colors.black,
+          title: const Text(
+            'Participants',
+            style: TextStyle(color: Colors.white),
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -513,9 +562,16 @@ class _ChatScreenState extends State<ChatScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+              child: const Text(
+                'Close',
+                style: TextStyle(color: Colors.purple),
+              ),
             ),
           ],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.purple.withOpacity(0.3)),
+          ),
         ),
       );
     } catch (e, stackTrace) {
@@ -529,10 +585,20 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildParticipantTile(String name, String email, bool isDriver) {
     return ListTile(
       leading: CircleAvatar(
-        child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?'),
+        backgroundColor: Colors.purple[800],
+        child: Text(
+          name.isNotEmpty ? name[0].toUpperCase() : '?',
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
-      title: Text(name),
-      subtitle: Text('${isDriver ? 'Driver' : 'Passenger'} • $email'),
+      title: Text(
+        name,
+        style: const TextStyle(color: Colors.white),
+      ),
+      subtitle: Text(
+        '${isDriver ? 'Driver' : 'Passenger'} • $email',
+        style: TextStyle(color: Colors.white.withOpacity(0.6)),
+      ),
     );
   }
 }
