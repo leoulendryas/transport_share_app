@@ -6,6 +6,11 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import '../models/message.dart';
 
+// WebSocket status codes
+const _wsNormalClosure = 1000;
+const _wsGoingAway = 1001;
+const _wsInternalError = 1011;
+
 enum ConnectionState {
   disconnected,
   connecting,
@@ -26,7 +31,7 @@ class WebSocketService {
   final ValueNotifier<List<Message>> messages = ValueNotifier([]);
   final ValueNotifier<String?> connectionError = ValueNotifier(null);
   final ValueNotifier<int> participantsCount = ValueNotifier(0);
-  final ValueNotifier<Set<String>> typingUsers = ValueNotifier({});
+  final ValueNotifier<Set<String>> typingUsers = ValueNotifier(<String>{});
   
   // Connection management
   bool _isDisposing = false;
@@ -36,7 +41,7 @@ class WebSocketService {
   Timer? _pongTimeoutTimer;
   int _reconnectAttempts = 0;
   DateTime? _lastPongReceived;
-  final Completer<void> _disposeCompleter = Completer<void>();
+  Completer<void>? _disposeCompleter;
   
   // Configuration
   static const int _maxReconnectAttempts = 5;
@@ -351,7 +356,7 @@ class WebSocketService {
   }
 
   void _handleParticipantChange(int delta) {
-    participantsCount.value = (participantsCount.value ?? 0) + delta;
+    participantsCount.value = participantsCount.value + delta;
   }
 
   void _handleRideCancelled(Map<String, dynamic> message) {
@@ -451,19 +456,19 @@ class WebSocketService {
   }
 
   Future<void> dispose() async {
-    if (_isDisposing) return _disposeCompleter.future;
-
+    if (_isDisposing) return _disposeCompleter?.future;
     _isDisposing = true;
-    _cancelPendingReconnect();
-    _pingTimer?.cancel();
-    _pongTimeoutTimer?.cancel();
-    connectionState.value = ConnectionState.disconnected;
+    _disposeCompleter = Completer<void>();
 
     try {
+      _cancelPendingReconnect();
+      _pingTimer?.cancel();
+      _pongTimeoutTimer?.cancel();
+      connectionState.value = ConnectionState.disconnected;
+
       await _subscription?.cancel();
-      if (_channel != null) {
-        await _closeChannelSafely();
-      }
+      await _closeChannelSafely();
+      
       messages.dispose();
       connectionState.dispose();
       connectionError.dispose();
@@ -472,37 +477,38 @@ class WebSocketService {
     } catch (e, stackTrace) {
       debugPrint('Disposal error: $e\n$stackTrace');
     } finally {
-      if (!_disposeCompleter.isCompleted) {
-        _disposeCompleter.complete();
-      }
+      _disposeCompleter!.complete();
+      _isDisposing = false;
     }
 
-    return _disposeCompleter.future;
+    return _disposeCompleter!.future;
   }
-
+  
   Future<void> _closeChannelSafely() async {
     if (_channel == null) return;
-  
+
+    final channel = _channel!;
+    _channel = null;
+
     try {
-      await _channel!.sink.close(ws_status.goingAway)
-          .timeout(const Duration(seconds: 2));
+      await channel.sink.close(_wsGoingAway)
+          .timeout(const Duration(seconds: 2), onTimeout: () {
+        debugPrint('WebSocket close timed out, forcing closure');
+        channel.sink.close();
+      });
     } catch (e) {
-      debugPrint('Error closing channel: $e');
+      debugPrint('Error closing WebSocket channel: $e');
       try {
-        // Check if the channel is still open before attempting to close it
-        if (_channel != null) {
-          _channel!.sink.close(); 
+        if (channel.closeCode != null && channel.closeCode != _wsNormalClosure) {
+          channel.sink.close(_wsInternalError);
         }
-      } catch (_) {
-        // If there's an error closing, suppress it.
-      }
-    } finally {
-      _channel = null; // Nullify after closing
+      } catch (_) {}
     }
   }
-
+  
   void _cancelPendingReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _reconnectAttempts = 0;
   }
 }
