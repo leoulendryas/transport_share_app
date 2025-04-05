@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 import '../../models/ride.dart';
 import 'company_chip.dart';
 
-// Company mapping (could also be imported from a shared file)
 final Map<int, String> companies = {
   1: 'Ride',
   2: 'Zyride',
@@ -20,21 +19,19 @@ class RideCard extends StatelessWidget {
     required this.onTap
   });
 
-  Color _getStatusColor(BuildContext context) {
+  Color _getStatusColor() {
     final status = RideStatus.values.firstWhere(
       (e) => e.toString().split('.').last == ride.status,
       orElse: () => RideStatus.pending,
     );
-
-    final colors = Theme.of(context).colorScheme;
     
     switch (status) {
-      case RideStatus.active: return colors.primary;
-      case RideStatus.full: return colors.secondary;
-      case RideStatus.completed: return colors.tertiary;
-      case RideStatus.canceled: return colors.error;
-      case RideStatus.pending: return colors.outline;
-      default: return colors.outline;
+      case RideStatus.active: return Colors.purple;
+      case RideStatus.full: return Colors.orange;
+      case RideStatus.completed: return Colors.green;
+      case RideStatus.canceled: return Colors.red;
+      case RideStatus.pending: return Colors.grey;
+      default: return Colors.grey;
     }
   }
 
@@ -43,23 +40,25 @@ class RideCard extends StatelessWidget {
       spacing: 4,
       runSpacing: 4,
       children: companyIds.map((id) => CompanyChip(
-        companyName: companies[id] ?? 'Unknown', // Use mapped company name
+        companyName: companies[id] ?? 'Unknown',
+        color: Colors.purple[800]!,
       )).toList(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final peopleSharing = ride.totalSeats - 1;
+    final availableSharing = ride.seatsAvailable - 1;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       elevation: 0,
+      color: Colors.black.withOpacity(0.7),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: colors.outline.withOpacity(0.2),
+          color: Colors.purple.withOpacity(0.3),
         ),
       ),
       child: InkWell(
@@ -76,8 +75,10 @@ class RideCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${ride.fromAddress.split(',').first} → ${ride.toAddress.split(',').first}',
-                      style: theme.textTheme.titleMedium?.copyWith(
+                      style: const TextStyle(
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -85,31 +86,52 @@ class RideCard extends StatelessWidget {
                   ),
                   CompanyChip(
                     companyName: ride.status.toString().split('.').last.toUpperCase(),
-                    color: _getStatusColor(context),
+                    color: _getStatusColor(),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.people_outline, size: 16, color: colors.onSurface.withOpacity(0.6)),
+                  Icon(Icons.people_outline, size: 16, color: Colors.white.withOpacity(0.6)),
                   const SizedBox(width: 4),
-                  Text(
-                    '${ride.seatsAvailable} of ${ride.totalSeats} seats',
-                    style: theme.textTheme.bodyMedium,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Shared with ${peopleSharing.clamp(0, peopleSharing)} ${peopleSharing == 1 ? 'person' : 'people'}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        '${availableSharing.clamp(0, availableSharing)} spot${availableSharing != 1 ? 's' : ''} available',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                   const Spacer(),
                   if (ride.departureTime != null) ...[
-                    Icon(Icons.access_time, size: 16, color: colors.onSurface.withOpacity(0.6)),
+                    Icon(Icons.access_time, size: 16, color: Colors.white.withOpacity(0.6)),
                     const SizedBox(width: 4),
                     Text(
                       DateFormat('MMM d, h:mm a').format(ride.departureTime!),
-                      style: theme.textTheme.bodyMedium,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
                     ),
                   ] else ...[
                     Text(
                       'No departure time',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurface.withOpacity(0.6)),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
                     ),
                   ]
                 ],
@@ -119,14 +141,16 @@ class RideCard extends StatelessWidget {
                 _buildCompanies(ride.companyIds),
                 const SizedBox(height: 12),
               ],
-              LinearProgressIndicator(
-                value: (ride.totalSeats - ride.seatsAvailable) / ride.totalSeats,
-                backgroundColor: colors.surfaceVariant,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  _getStatusColor(context),
-                ),
-                minHeight: 6,
+              ClipRRect(
                 borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: (ride.totalSeats - ride.seatsAvailable) / ride.totalSeats,
+                  backgroundColor: Colors.black.withOpacity(0.4),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    _getStatusColor(),
+                  ),
+                  minHeight: 6,
+                ),
               ),
             ],
           ),
