@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../models/ride.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_service.dart';
 import '../chat/chat_screen.dart';
+import '../../widgets/sexy_chip.dart';
+import '../../widgets/glass_card.dart';
 
 class RideDetailScreen extends StatefulWidget {
   final Ride ride;
@@ -53,12 +56,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error checking participation: ${e.toString()}'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showErrorSnackbar('Error checking participation: ${e.toString()}');
       }
     }
   }
@@ -66,14 +64,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
   Future<void> _joinRide() async {
     try {
       if (_ride.seatsAvailable <= 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('This ride is full.'),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+        _showErrorSnackbar('This shared ride is full');
         return;
       }
 
@@ -87,25 +78,13 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
           _isLoading = false;
         });
 
-        // Navigate to chat after joining
         _navigateToChat();
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Successfully joined the ride!'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showSuccessSnackbar('🚗 Ride joined successfully!');
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to join ride: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showErrorSnackbar('Failed to join ride: $e');
       }
     }
   }
@@ -121,23 +100,12 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
           _ride = _ride.copyWith(seatsAvailable: _ride.seatsAvailable + 1);
           _isLoading = false;
         });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You have left the ride'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showSuccessSnackbar('You have left the shared ride');
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to leave ride: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showErrorSnackbar('Failed to leave ride: $e');
       }
     }
   }
@@ -149,22 +117,12 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ride cancelled successfully'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showSuccessSnackbar('Ride cancelled successfully');
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to cancel ride: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _showErrorSnackbar('Failed to cancel ride: $e');
       }
     }
   }
@@ -174,6 +132,38 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => ChatScreen(rideId: _ride.id.toString()),
+      ),
+    ).then((_) => _checkParticipation());
+  }
+
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: Colors.black,
+        action: SnackBarAction(
+          label: 'OK',
+          textColor: Colors.white,
+          onPressed: () {},
+        ),
+      ),
+    );
+  }
+
+  void _showSuccessSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: Colors.purple[800],
+        action: SnackBarAction(
+          label: 'OK',
+          textColor: Colors.white,
+          onPressed: () {},
+        ),
       ),
     );
   }
@@ -186,18 +176,14 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
             ? Colors.orange
             : Colors.red;
 
-    return Chip(
-      label: Text(
-        status.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      backgroundColor: color.withOpacity(0.2),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+    return SexyChip(
+      label: status.toUpperCase(),
+      color: color,
+      icon: _ride.status == RideStatus.active
+          ? Icons.check_circle
+          : _ride.status == RideStatus.full
+              ? Icons.warning
+              : Icons.cancel,
     );
   }
 
@@ -210,145 +196,278 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
     return Wrap(
       spacing: 8,
       children: companyIds.map((id) {
-        return Chip(
-          label: Text(
-            companies[id] ?? 'Company $id',
-            style: const TextStyle(fontSize: 12),
-          ),
-          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-          labelStyle: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+        return SexyChip(
+          label: companies[id] ?? 'Company $id',
+          color: Colors.purple[800]!,
+          icon: Icons.directions_car_filled,
         );
       }).toList(),
     );
   }
 
-  Widget _buildDetailCard(IconData icon, String title, String value) {
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-        ),
-      ),
-      child: ListTile(
-        leading: Icon(icon, size: 24),
-        title: Text(title, style: Theme.of(context).textTheme.bodySmall),
-        subtitle: Text(
-          value,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w500,
+  Widget _buildDetailCard(IconData icon, String title, String value, {String? description}) {
+    return GlassCard(
+      color: Colors.black,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 24,
+                    color: Colors.purple,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
               ),
+            ),
+            if (description != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                description,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ],
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
-    );
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0);
+  }
+
+  Widget _buildSeatInfoCard() {
+    final filledSeats = _ride.totalSeats - _ride.seatsAvailable;
+    final percentage = filledSeats / _ride.totalSeats;
+
+    return GlassCard(
+      color: Colors.black,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.people_outline,
+                    size: 24,
+                    color: Colors.purple,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    'Ride Sharing',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  '$filledSeats/${_ride.totalSeats} seats filled',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${_ride.seatsAvailable} available',
+                  style: TextStyle(
+                    color: Colors.purple,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: percentage,
+                minHeight: 10,
+                backgroundColor: Colors.black.withOpacity(0.4),
+                color: _ride.seatsAvailable > 0
+                    ? Colors.purple
+                    : Colors.red,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (_ride.seatsAvailable > 0)
+              Text(
+                'Join ${_ride.seatsAvailable} other${_ride.seatsAvailable > 1 ? 's' : ''} in this ride',
+                style: TextStyle(color: Colors.white.withOpacity(0.8)),
+              )
+            else
+              Text(
+                'This ride is full',
+                style: TextStyle(
+                  color: Colors.red[400],
+                ),
+              ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0);
   }
 
   List<Widget> _buildActionButtons() {
     if (_isLoading) {
-      return [const Center(child: CircularProgressIndicator())];
+      return [
+        const Center(
+          child: CircularProgressIndicator(color: Colors.purple),
+        ),
+      ];
     }
 
+    final buttons = <Widget>[];
+
+    // Chat button appears for both drivers and participants
+    if (_isDriver || _isParticipant) {
+      buttons.add(
+        FilledButton.icon(
+          onPressed: _navigateToChat,
+          icon: const Icon(Icons.chat_bubble_outline),
+          label: const Text('Group Chat'),
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.purple[800],
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 50),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ).animate().fadeIn(delay: 100.ms),
+      );
+    }
+
+    // Driver-specific actions
     if (_isDriver) {
-      return [
-        ElevatedButton(
-          onPressed: _navigateToChat,
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 50),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          child: const Text('Open Group Chat'),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton(
+      buttons.addAll([
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
           onPressed: () => _showCancelConfirmation(),
+          icon: const Icon(Icons.cancel_outlined),
+          label: const Text('Cancel Ride'),
           style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.red[400],
             minimumSize: const Size(double.infinity, 50),
-            side: BorderSide(color: Theme.of(context).colorScheme.error),
-          ),
-          child: Text(
-            'Cancel Ride',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.error,
-            ),
-          ),
-        ),
-      ];
-    }
-
-    if (_isParticipant) {
-      return [
-        ElevatedButton(
-          onPressed: _navigateToChat,
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 50),
+            side: BorderSide(color: Colors.red[400]!),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text('Open Group Chat'),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton(
+        ).animate().fadeIn(delay: 200.ms),
+      ]);
+    } 
+    // Participant-specific actions
+    else if (_isParticipant) {
+      buttons.addAll([
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
           onPressed: _leaveRide,
+          icon: const Icon(Icons.exit_to_app),
+          label: const Text('Leave Ride'),
           style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.red[400],
             minimumSize: const Size(double.infinity, 50),
-            side: BorderSide(color: Theme.of(context).colorScheme.error),
-          ),
-          child: Text(
-            'Leave Ride',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.error,
+            side: BorderSide(color: Colors.red[400]!),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
-        ),
-      ];
-    }
-
-    if (_ride.status == RideStatus.active) {
-      return [
-        ElevatedButton(
-          onPressed: _joinRide,
-          style: ElevatedButton.styleFrom(
+        ).animate().fadeIn(delay: 200.ms),
+      ]);
+    } 
+    // Join button for non-participants
+    else if (_ride.status == RideStatus.active) {
+      buttons.add(
+        FilledButton.icon(
+          onPressed: _ride.seatsAvailable > 0 ? _joinRide : null,
+          icon: const Icon(Icons.directions_car),
+          label: const Text('Join Ride'),
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.purple[800],
+            foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.purple[800]!.withOpacity(0.5),
             minimumSize: const Size(double.infinity, 50),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text('Join Ride'),
-        ),
-      ];
+        ).animate().fadeIn(delay: 100.ms),
+      );
     }
 
-    return [];
+    return buttons;
   }
 
   void _showCancelConfirmation() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cancel Ride'),
-        content: const Text('Are you sure you want to cancel this ride? All participants will be notified.'),
+        backgroundColor: Colors.black,
+        title: const Text('Cancel Ride?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'This will notify all participants and cancel the ride. This action cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.purple.withOpacity(0.3)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('No'),
+            child: const Text('Go Back', style: TextStyle(color: Colors.white)),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () {
               Navigator.pop(context);
               _cancelRide();
             },
-            child: const Text('Yes'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red[800],
+            ),
+            child: const Text('Confirm Cancel'),
           ),
         ],
       ),
@@ -356,84 +475,133 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
   }
 
   String _formatDepartureTime(DateTime? dateTime) {
-    if (dateTime == null) return 'Not specified';
-    return DateFormat.yMMMd().add_jm().format(dateTime);
+    if (dateTime == null) return 'Flexible (contact driver)';
+    return DateFormat('EEE, MMM d • h:mm a').format(dateTime);
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     if (_isLoading) {
       return Scaffold(
+        backgroundColor: Colors.black,
         body: Center(
           child: CircularProgressIndicator(
-            color: Theme.of(context).colorScheme.primary,
+            color: Colors.purple,
           ),
         ),
       );
     }
 
     return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: false,
       appBar: AppBar(
         title: Text(
           'Ride to ${_ride.toAddress.split(',').first}',
-          style: theme.textTheme.titleLarge,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         centerTitle: true,
         elevation: 0,
-        actions: [_buildStatusIndicator()],
+        backgroundColor: Colors.transparent,
+        scrolledUnderElevation: 4,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: _buildStatusIndicator(),
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _buildDetailCard(
-              Icons.location_on_outlined,
-              'From',
-              _ride.fromAddress,
-            ),
-            _buildDetailCard(
-              Icons.flag_outlined,
-              'To',
-              _ride.toAddress,
-            ),
-            _buildDetailCard(
-              Icons.people_outlined,
-              'Available Seats',
-              '${_ride.seatsAvailable} of ${_ride.totalSeats}',
-            ),
-            _buildDetailCard(
-              Icons.access_time_outlined,
-              'Departure Time',
-              _formatDepartureTime(_ride.departureTime),
-            ),
-            Card(
-              elevation: 0,
-              margin: const EdgeInsets.symmetric(vertical: 4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(
-                  color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Ride-Sharing Companies',
-                      style: theme.textTheme.bodySmall,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black,
+              Colors.purple[900]!,
+            ],
+          ),
+        ),
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  const SizedBox(height: 24),
+                  _buildDetailCard(
+                    Icons.location_on_outlined,
+                    'Pickup Location',
+                    _ride.fromAddress,
+                  ),
+                  _buildDetailCard(
+                    Icons.flag_outlined,
+                    'Destination',
+                    _ride.toAddress,
+                  ),
+                  _buildSeatInfoCard(),
+                  GlassCard(
+                    color: Colors.black,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.directions_car_filled,
+                                  size: 24,
+                                  color: Colors.purple,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  'Ride-Sharing Companies',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _buildCompanyChips(_ride.companyIds),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    _buildCompanyChips(_ride.companyIds),
-                  ],
-                ),
+                  ),
+                ]),
               ),
             ),
-            const SizedBox(height: 24),
-            ..._buildActionButtons(),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  ..._buildActionButtons(),
+                  const SizedBox(height: 20),
+                  if (!_isDriver && !_isParticipant)
+                    Text(
+                      'By joining this ride, you agree to our Terms of Service and Community Guidelines',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.4),
+                      ),
+                    ),
+                ]),
+              ),
+            ),
           ],
         ),
       ),
