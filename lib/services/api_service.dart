@@ -134,6 +134,51 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getUserActiveRides({
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      
+      // Verify authorization header exists
+      if (!headers.containsKey('Authorization')) {
+        throw ApiException('Authentication required', 401);
+      }
+  
+      final queryParams = {
+        'page': page.toString(),
+        'limit': limit.toString(),
+      };
+  
+      final uri = Uri.parse('$baseUrl/rides/user/active-rides')
+          .replace(queryParameters: queryParams);
+          
+      print('Making request to: ${uri.toString()}'); // Debug print
+      
+      final response = await http.get(uri, headers: headers);
+      
+      print('Response status: ${response.statusCode}'); // Debug print
+      print('Response body: ${response.body}'); // Debug print
+  
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        final errorData = jsonDecode(response.body) as Map<String, dynamic>;
+        throw ApiException(
+          errorData['error'] ?? 'Failed to load user rides',
+          response.statusCode,
+        );
+      }
+    } on http.ClientException catch (e) {
+      throw ApiException('Network error: ${e.message}', 0);
+    } on FormatException catch (e) {
+      throw ApiException('Data parsing error: ${e.message}', 0);
+    } catch (e) {
+      throw ApiException('Unexpected error: ${e.toString()}', 0);
+    }
+  }
+
   Future<void> joinRide(String rideId) async {
     try {
       final headers = await _getHeaders();
@@ -199,18 +244,31 @@ class ApiService {
         headers: headers,
       );
 
+      final responseBody = jsonDecode(response.body);
+
       if (response.statusCode == 200) {
-        return (jsonDecode(response.body) as List)
-            .map((msg) => Message.fromJson(msg as Map<String, dynamic>))
-            .toList();
+        if (responseBody is Map && responseBody.containsKey('messages')) {
+          return (responseBody['messages'] as List)
+              .map((msg) => Message.fromJson(msg as Map<String, dynamic>))
+              .toList();
+        } else if (responseBody is List) {
+          // Handle case where response is directly a list
+          return responseBody
+              .map((msg) => Message.fromJson(msg as Map<String, dynamic>))
+              .toList();
+        } else {
+          throw ApiException('Unexpected response format', response.statusCode);
+        }
       } else {
         throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to load messages',
+          (responseBody as Map)['error']?.toString() ?? 'Failed to load messages',
           response.statusCode,
         );
       }
+    } on FormatException {
+      throw ApiException('Invalid response format', 0);
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Network error: ${e.toString()}', 0);
     }
   }
 
@@ -221,23 +279,29 @@ class ApiService {
       }
 
       final headers = await _getHeaders();
+      headers['Content-Type'] = 'application/json';
+
       final response = await http.post(
         Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
         headers: headers,
         body: jsonEncode({'content': content}),
       );
 
+      final responseBody = jsonDecode(response.body);
+
       if (response.statusCode == 200) {
-        return Message.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+        return Message.fromJson(responseBody as Map<String, dynamic>);
       } else {
         throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to send message',
+          (responseBody as Map)['error']?.toString() ?? 'Failed to send message',
           response.statusCode,
         );
       }
+    } on FormatException {
+      throw ApiException('Invalid response format', 0);
     } catch (e) {
       if (e is ApiException) rethrow;
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Network error: ${e.toString()}', 0);
     }
   }
 
