@@ -4,42 +4,62 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService extends ChangeNotifier {
-  static const String _baseUrl = 'http://localhost:5000'; // Update with your backend URL
+  static const String _baseUrl = 'http://localhost:5000';
+  static const String _tokenKey = 'auth_token';
+  static const String _refreshTokenKey = 'refresh_token';
+  static const String _userIdKey = 'user_id';
+  static const String _emailKey = 'user_email';
+
   String? _token;
   String? _refreshToken;
   String? _userId;
   String? _email;
-  String? get email => _email;
-  String? get token => _token;
-  String? get userId => _userId;
-  bool get isAuthenticated => _token != null;
+  bool _initialized = false;
+  SharedPreferences? _prefs;
 
-  late final SharedPreferences _prefs;
+  // Getters
+  String? get token => _token;
+  String? get refreshToken => _refreshToken;
+  String? get userId => _userId;
+  String? get email => _email;
+  bool get isAuthenticated => _token != null;
+  bool get isInitialized => _initialized;
 
   Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
-    _token = _prefs.getString('token');
-    _refreshToken = _prefs.getString('refreshToken');
-    _userId = _prefs.getString('userId');
-    _email = _prefs.getString('email'); // Add this line
-    notifyListeners();
+    if (_initialized) return;
+
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      _token = _prefs?.getString(_tokenKey);
+      _refreshToken = _prefs?.getString(_refreshTokenKey);
+      _userId = _prefs?.getString(_userIdKey);
+      _email = _prefs?.getString(_emailKey);
+      _initialized = true;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to initialize AuthService: $e');
+      _initialized = true; // Mark as initialized even if failed
+      notifyListeners();
+      rethrow;
+    }
   }
 
-  Future<void> register(String email, String password) async {
-    if (!_validateEmail(email)) {
-      throw Exception('Invalid email format');
-    }
-    if (!_validatePassword(password)) {
-      throw Exception('Password must be at least 6 characters long');
-    }
+  Future<void> register({
+    required String email,
+    required String password,
+    String? name,
+  }) async {
+    _validateEmail(email);
+    _validatePassword(password);
 
     final response = await http.post(
       Uri.parse('$_baseUrl/auth/register'),
+      headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'email': email,
-        'password': password
+        'password': password,
+        if (name != null) 'name': name,
       }),
-      headers: {'Content-Type': 'application/json'},
     );
 
     final responseData = _handleAuthResponse(response);
@@ -47,27 +67,23 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> login(String email, String password) async {
-    if (!_validateEmail(email)) {
-      throw Exception('Invalid email format');
-    }
-    if (!_validatePassword(password)) {
-      throw Exception('Password must be at least 6 characters long');
-    }
+    _validateEmail(email);
+    _validatePassword(password);
 
     final response = await http.post(
       Uri.parse('$_baseUrl/auth/login'),
+      headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'email': email,
-        'password': password
+        'password': password,
       }),
-      headers: {'Content-Type': 'application/json'},
     );
 
     final responseData = _handleAuthResponse(response);
     await _persistAuthData(responseData);
   }
 
-  Future<String> refreshToken() async {
+  Future<String> refreshAuthToken() async {
     if (_refreshToken == null) {
       throw Exception('No refresh token available');
     }
@@ -81,7 +97,7 @@ class AuthService extends ChangeNotifier {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       _token = data['token'];
-      await _prefs.setString('token', _token!);
+      await _prefs?.setString(_tokenKey, _token!);
       notifyListeners();
       return _token!;
     } else {
@@ -91,13 +107,30 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await _prefs.remove('token');
-    await _prefs.remove('refreshToken');
-    await _prefs.remove('userId');
-    _token = null;
-    _refreshToken = null;
-    _userId = null;
-    notifyListeners();
+    try {
+      if (_token != null) {
+        await http.post(
+          Uri.parse('$_baseUrl/auth/logout'),
+          headers: {'Authorization': 'Bearer $_token'},
+        );
+      }
+    } catch (e) {
+      debugPrint('Error during logout API call: $e');
+    } finally {
+      await _clearAuthData();
+    }
+  }
+
+  void _validateEmail(String email) {
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
+      throw Exception('Invalid email format');
+    }
+  }
+
+  void _validatePassword(String password) {
+    if (password.length < 6) {
+      throw Exception('Password must be at least 6 characters long');
+    }
   }
 
   Map<String, dynamic> _handleAuthResponse(http.Response response) {
@@ -110,25 +143,67 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _persistAuthData(Map<String, dynamic> data) async {
-    _token = data['token'];
-    _userId = data['user']['id'].toString();
-    _refreshToken = data['refreshToken'] ?? _refreshToken;
-    _email = data['user']['email']; // Add this line
+    try {
+      _token = data['token'];
+      _userId = data['user']['id'].toString();
+      _email = data['user']['email'];
+      _refreshToken = data['refreshToken'] ?? _refreshToken;
 
-    await _prefs.setString('token', _token!);
-    await _prefs.setString('userId', _userId!);
-    await _prefs.setString('email', _email!); // Add this line
-    if (_refreshToken != null) {
-      await _prefs.setString('refreshToken', _refreshToken!);
+      if (_prefs == null) {
+        await init();
+      }
+
+      final futures = <Future<bool>>[
+        _prefs!.setString(_tokenKey, _token!),
+        _prefs!.setString(_userIdKey, _userId!),
+        _prefs!.setString(_emailKey, _email!),
+      ];
+
+      if (_refreshToken != null) {
+        futures.add(_prefs!.setString(_refreshTokenKey, _refreshToken!));
+      }
+
+      await Future.wait(futures);
+      notifyListeners();
+    } catch (e) {
+      await _clearAuthData();
+      rethrow;
     }
+  }
+
+  Future<void> _clearAuthData() async {
+    if (_prefs == null) {
+      await init();
+    }
+
+    final futures = <Future<bool>>[
+      _prefs!.remove(_tokenKey),
+      _prefs!.remove(_refreshTokenKey),
+      _prefs!.remove(_userIdKey),
+      _prefs!.remove(_emailKey),
+    ];
+
+    await Future.wait(futures);
+
+    _token = null;
+    _refreshToken = null;
+    _userId = null;
+    _email = null;
     notifyListeners();
   }
 
-  bool _validateEmail(String email) {
-    return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
-  }
+  Future<Map<String, String>> getAuthHeaders() async {
+    if (!_initialized || _prefs == null) {
+      await init();
+    }
+    
+    if (_token == null) {
+      return {};
+    }
 
-  bool _validatePassword(String password) {
-    return password.length >= 6;
+    return {
+      'Authorization': 'Bearer $_token',
+      'Content-Type': 'application/json',
+    };
   }
 }
