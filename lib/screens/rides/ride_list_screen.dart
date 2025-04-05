@@ -2,52 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../models/ride.dart';
 import '../../models/lat_lng.dart';
 import '../../services/api_service.dart';
 import 'create_ride_screen.dart';
+import 'user_active_rides_screen.dart';
 import '../../widgets/ride_card.dart';
 import 'ride_detail_screen.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
-
-final Map<int, String> companies = {
-  1: 'Ride',
-  2: 'Zyride',
-  3: 'Feres',
-};
-
-class LocationWithName {
-  final double latitude;
-  final double longitude;
-  final String displayName;
-
-  LocationWithName({
-    required this.latitude,
-    required this.longitude,
-    required this.displayName,
-  });
-}
-
-class RideResponse {
-  final List<Ride> rides;
-  final Map<String, dynamic> pagination;
-
-  RideResponse({
-    required this.rides,
-    required this.pagination,
-  });
-
-  factory RideResponse.fromJson(Map<String, dynamic> json) {
-    return RideResponse(
-      rides: (json['results'] as List)
-          .map((rideJson) => Ride.fromJson(rideJson as Map<String, dynamic>))
-          .toList(),
-      pagination: json['pagination'] as Map<String, dynamic>,
-    );
-  }
-}
+import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
+import '../../widgets/glass_card.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 class RideListScreen extends StatefulWidget {
   const RideListScreen({super.key});
@@ -59,12 +28,12 @@ class RideListScreen extends StatefulWidget {
 class _RideListScreenState extends State<RideListScreen> {
   final _fromController = TextEditingController();
   final _toController = TextEditingController();
-  late Future<RideResponse> _ridesFuture;
   late ApiService _apiService;
   bool _isLoading = false;
   int _currentPage = 1;
   final int _itemsPerPage = 20;
   bool _hasMore = true;
+  Timer? _searchDebounce;
   
   LatLng? _selectedFromLocation;
   LatLng? _selectedToLocation;
@@ -74,20 +43,18 @@ class _RideListScreenState extends State<RideListScreen> {
   void initState() {
     super.initState();
     _apiService = Provider.of<ApiService>(context, listen: false);
-    _ridesFuture = Future.value(RideResponse(rides: [], pagination: {'total': 0}));
   }
 
   @override
   void dispose() {
     _fromController.dispose();
     _toController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
-  Future<RideResponse> _fetchRides({bool loadMore = false}) async {
-    if (_selectedFromLocation == null || _selectedToLocation == null) {
-      return RideResponse(rides: [], pagination: {'total': 0});
-    }
+  Future<void> _fetchRides({bool loadMore = false}) async {
+    if (_selectedFromLocation == null || _selectedToLocation == null) return;
 
     if (!loadMore) {
       _currentPage = 1;
@@ -107,87 +74,80 @@ class _RideListScreenState extends State<RideListScreen> {
         limit: _itemsPerPage,
       );
 
-      final rideResponse = RideResponse.fromJson(response);
-      _allRides.addAll(rideResponse.rides);
+      final newRides = (response['results'] as List)
+          .map((rideJson) => Ride.fromJson(rideJson))
+          .toList();
 
-      if (rideResponse.rides.length < _itemsPerPage) {
-        _hasMore = false;
-      }
-
-      return RideResponse(
-        rides: _allRides,
-        pagination: rideResponse.pagination,
-      );
-    } on ApiException catch (e) {
-      debugPrint('API Error: ${e.toString()}');
-      if (mounted && !loadMore) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.message}'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      return RideResponse(rides: [], pagination: {'total': 0});
+      setState(() {
+        _allRides.addAll(newRides);
+        _hasMore = newRides.length >= _itemsPerPage;
+        _isLoading = false;
+      });
     } catch (e) {
-      debugPrint('Unexpected error: ${e.toString()}');
+      setState(() => _isLoading = false);
       if (mounted && !loadMore) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to fetch rides: ${e.toString()}'),
+            content: Text(e is ApiException ? e.message : 'Failed to load shared rides'),
+            backgroundColor: Colors.purple[800],
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
           ),
         );
-      }
-      return RideResponse(rides: [], pagination: {'total': 0});
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
       }
     }
   }
 
   Future<void> _loadMoreRides() async {
     if (_isLoading || !_hasMore) return;
-
     _currentPage++;
-    final newData = await _fetchRides(loadMore: true);
-    
-    if (mounted) {
-      setState(() {
-        _ridesFuture = Future.value(newData);
-      });
-    }
+    await _fetchRides(loadMore: true);
   }
 
   Future<List<LocationWithName>> _getLocationSuggestions(String query) async {
     if (query.isEmpty) return [];
+    _searchDebounce?.cancel();
+    
+    final completer = Completer<List<LocationWithName>>();
+    
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        if (kIsWeb) {
+          final response = await http.get(
+            Uri.parse('https://nominatim.openstreetmap.org/search?q=$query, Addis Ababa&format=json&addressdetails=1')
+          );
 
-    try {
-      if (kIsWeb) {
-        final response = await http.get(
-          Uri.parse('https://nominatim.openstreetmap.org/search?q=$query, Addis Ababa&format=json&addressdetails=1')
-        );
-
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body) as List;
-          return data.map((item) => LocationWithName(
-            latitude: double.parse(item['lat']),
-            longitude: double.parse(item['lon']),
-            displayName: item['display_name'] ?? '${item['lat']}, ${item['lon']}',
-          )).toList();
+          if (response.statusCode == 200) {
+            final data = json.decode(response.body) as List;
+            completer.complete(data.map((item) => LocationWithName(
+              latitude: double.parse(item['lat']),
+              longitude: double.parse(item['lon']),
+              displayName: item['display_name'] ?? '${item['lat']}, ${item['lon']}',
+            )).toList());
+          } else {
+            completer.complete([]);
+          }
+        } else {
+          final placemarks = await locationFromAddress('$query, Addis Ababa');
+          final results = await Future.wait(
+            placemarks.map((p) => _createLocationWithName(p))
+          );
+          completer.complete(results);
         }
-        return [];
-      } else {
-        final placemarks = await locationFromAddress('$query, Addis Ababa');
-        return await Future.wait(
-          placemarks.map((p) => _createLocationWithName(p))
-        );
+      } catch (e) {
+        debugPrint('Geocoding error: $e');
+        completer.complete([]);
       }
-    } catch (e) {
-      debugPrint('Geocoding error: $e');
-      return [];
-    }
+    });
+
+    return completer.future;
   }
 
   Future<LocationWithName> _createLocationWithName(Location location) async {
@@ -221,27 +181,31 @@ class _RideListScreenState extends State<RideListScreen> {
 
   Future<void> _search() async {
     if (_selectedFromLocation == null || _selectedToLocation == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select both locations'),
-            behavior: SnackBarBehavior.floating,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please select both locations'),
+          backgroundColor: Colors.purple[800],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
           ),
-        );
-      }
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: Colors.white,
+            onPressed: () {},
+          ),
+        ),
+      );
       return;
     }
-
-    setState(() {
-      _ridesFuture = _fetchRides();
-    });
+    await _fetchRides();
   }
 
   void _navigateToCreateRide() {
     Navigator.push(
       context, 
       MaterialPageRoute(builder: (_) => const CreateRideScreen())
-    );
+    ).then((_) => _fetchRides());
   }
 
   void _clearSearch() {
@@ -253,241 +217,372 @@ class _RideListScreenState extends State<RideListScreen> {
       _currentPage = 1;
       _hasMore = true;
       _allRides = [];
-      _ridesFuture = Future.value(RideResponse(rides: [], pagination: {'total': 0}));
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Available Rides'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _navigateToCreateRide,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _clearSearch,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+  Widget _buildSearchHeader() {
+    return GlassCard(
+      color: Colors.black,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Search Ride',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TypeAheadField<LocationWithName>(
+              controller: _fromController,
+              suggestionsCallback: _getLocationSuggestions,
+              itemBuilder: (_, location) => ListTile(
+                leading: const Icon(Icons.location_on, color: Colors.purple),
+                title: Text(
+                  location.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+              onSelected: (location) {
+                setState(() {
+                  _selectedFromLocation = LatLng(location.latitude, location.longitude);
+                  _fromController.text = location.displayName;
+                });
+                _search();
+              },
+              builder: (context, controller, focusNode) => TextFormField(
+                controller: controller,
+                focusNode: focusNode,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Pickup Location',
+                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                  prefixIcon: const Icon(Icons.location_on, color: Colors.purple),
+                  suffixIcon: _fromController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.6)),
+                          onPressed: () {
+                            setState(() {
+                              _fromController.clear();
+                              _selectedFromLocation = null;
+                            });
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.black.withOpacity(0.4),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.purple),
+                  ),
+                ),
+                validator: (value) => value!.isEmpty ? 'Required' : null,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TypeAheadField<LocationWithName>(
+              controller: _toController,
+              suggestionsCallback: _getLocationSuggestions,
+              itemBuilder: (_, location) => ListTile(
+                leading: const Icon(Icons.flag, color: Colors.purple),
+                title: Text(
+                  location.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+              onSelected: (location) {
+                setState(() {
+                  _selectedToLocation = LatLng(location.latitude, location.longitude);
+                  _toController.text = location.displayName;
+                });
+                _search();
+              },
+              builder: (context, controller, focusNode) => TextFormField(
+                controller: controller,
+                focusNode: focusNode,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Destination',
+                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                  prefixIcon: const Icon(Icons.flag, color: Colors.purple),
+                  suffixIcon: _toController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.6)),
+                          onPressed: () {
+                            setState(() {
+                              _toController.clear();
+                              _selectedToLocation = null;
+                            });
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.black.withOpacity(0.4),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.purple),
+                  ),
+                ),
+                validator: (value) => value!.isEmpty ? 'Required' : null,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
               children: [
                 Expanded(
-                  child: TypeAheadField<LocationWithName>(
-                    controller: _fromController,
-                    suggestionsCallback: _getLocationSuggestions,
-                    itemBuilder: (_, location) => ListTile(
-                      title: Text(
-                        location.displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    onSelected: (location) {
-                      setState(() {
-                        _selectedFromLocation = LatLng(
-                          location.latitude,
-                          location.longitude,
-                        );
-                        _fromController.text = location.displayName;
-                      });
-                    },
-                    builder: (context, controller, focusNode) => TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      decoration: InputDecoration(
-                        labelText: 'From',
-                        prefixIcon: const Icon(Icons.location_on),
-                        suffixIcon: _fromController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  setState(() {
-                                    _fromController.clear();
-                                    _selectedFromLocation = null;
-                                  });
-                                },
-                              )
-                            : null,
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.search, color: Colors.white),
+                    label: const Text('Find Rides', style: TextStyle(color: Colors.white)),
+                    onPressed: _isLoading ? null : _search,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.purple[800],
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: TypeAheadField<LocationWithName>(
-                    controller: _toController,
-                    suggestionsCallback: _getLocationSuggestions,
-                    itemBuilder: (_, location) => ListTile(
-                      title: Text(
-                        location.displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    onSelected: (location) {
-                      setState(() {
-                        _selectedToLocation = LatLng(
-                          location.latitude,
-                          location.longitude,
-                        );
-                        _toController.text = location.displayName;
-                      });
-                    },
-                    builder: (context, controller, focusNode) => TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      decoration: InputDecoration(
-                        labelText: 'To',
-                        prefixIcon: const Icon(Icons.flag),
-                        suffixIcon: _toController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  setState(() {
-                                    _toController.clear();
-                                    _selectedToLocation = null;
-                                  });
-                                },
-                              )
-                            : null,
-                      ),
-                      onSubmitted: (_) => _search(),
+                IconButton(
+                  icon: const Icon(Icons.my_location, color: Colors.purple),
+                  onPressed: () {
+                    // TODO: Implement current location logic
+                  },
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black.withOpacity(0.4),
+                    padding: const EdgeInsets.all(16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: _isLoading 
-                      ? const CircularProgressIndicator()
-                      : const Icon(Icons.search),
-                  onPressed: _isLoading ? null : _search,
                 ),
               ],
             ),
-          ),
-          Expanded(
-            child: FutureBuilder<RideResponse>(
-              future: _ridesFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting && !_isLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Error loading rides',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          snapshot.error.toString(),
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _search,
-                          child: const Text('Try Again'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                
-                final rides = snapshot.data?.rides ?? [];
-                final pagination = snapshot.data?.pagination ?? {'total': 0};
-                final totalItems = pagination['total'] as int;
+          ],
+        ),
+      ),
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0);
+  }
 
-                if (rides.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.directions_car,
-                          size: 48,
-                          color: colors.primary,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _selectedFromLocation == null || _selectedToLocation == null
-                              ? 'Select locations to find rides'
-                              : 'No rides found for your route',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 16),
-                        OutlinedButton(
-                          onPressed: _navigateToCreateRide,
-                          child: const Text('Create New Ride'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                
-                return NotificationListener<ScrollNotification>(
-                  onNotification: (scrollInfo) {
-                    if (scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent && 
-                        !_isLoading && 
-                        _hasMore &&
-                        rides.length < totalItems) {
-                      _loadMoreRides();
-                    }
-                    return false;
-                  },
-                  child: RefreshIndicator(
-                    onRefresh: _search,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 80),
-                      itemCount: rides.length + (_hasMore && rides.length < totalItems ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == rides.length) {
-                          return const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(16.0),
-                              child: CircularProgressIndicator(),
-                            ),
-                          );
-                        }
-                        final ride = rides[index];
-                        return RideCard(
-                          ride: ride,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => RideDetailScreen(ride: ride),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                );
-              },
+  Widget _buildEmptyState(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.directions_car_filled,
+            size: 80,
+            color: Colors.purple.withOpacity(0.3),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _selectedFromLocation == null || _selectedToLocation == null
+                ? 'Where are you going today?'
+                : 'No rides found for this route',
+            style: const TextStyle(
+              fontSize: 20,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _selectedFromLocation == null || _selectedToLocation == null
+                ? 'Enter your pickup and destination to find shared meter taxis'
+                : 'Be the first to create this route!',
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.white70,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            icon: const Icon(Icons.add, color: Colors.white),
+            label: const Text('Create Shared Meter Taxi', style: TextStyle(color: Colors.white)),
+            onPressed: _navigateToCreateRide,
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.purple[800],
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLoadingShimmer() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[900]!,
+      highlightColor: Colors.grey[800]!,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: 5,
+        itemBuilder: (_, __) => Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.purple.withOpacity(0.3)),
+          ),
+          height: 120,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: false,
+      appBar: AppBar(
+        title: const Text('Meter Taxi Share', style: TextStyle(color: Colors.white)),
+        centerTitle: true,
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.purple),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person, color: Colors.purple),
+            tooltip: 'My Rides',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UserActiveRidesScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.purple),
+            onPressed: _navigateToCreateRide,
+            tooltip: 'Create Ride',
+          ),
+        ],
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black,
+              Colors.purple[900]!,
+            ],
+          ),
+        ),
+        child: LiquidPullToRefresh(
+          onRefresh: _fetchRides,
+          color: Colors.purple[800],
+          backgroundColor: Colors.black,
+          height: 120,
+          animSpeedFactor: 2,
+          showChildOpacityTransition: false,
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: _buildSearchHeader(),
+                ),
+              ),
+              if (_isLoading && _allRides.isEmpty)
+                SliverFillRemaining(
+                  child: _buildLoadingShimmer(),
+                )
+              else if (_allRides.isEmpty)
+                SliverFillRemaining(
+                  child: _buildEmptyState(context),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index == _allRides.length) {
+                          return _hasMore 
+                              ? const Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: Center(child: CircularProgressIndicator(
+                                    color: Colors.purple,
+                                  )),
+                                )
+                              : const SizedBox();
+                        }
+                        final ride = _allRides[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Hero(
+                            tag: 'ride_${ride.id}',
+                            child: RideCard(
+                              ride: ride,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => RideDetailScreen(ride: ride),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      childCount: _allRides.length + (_hasMore ? 1 : 0),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToCreateRide,
+        tooltip: 'Create Shared Ride',
+        backgroundColor: Colors.purple[800],
+        foregroundColor: Colors.white,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: const Icon(Icons.add),
       ),
     );
   }
+}
+
+class LocationWithName {
+  final double latitude;
+  final double longitude;
+  final String displayName;
+
+  LocationWithName({
+    required this.latitude,
+    required this.longitude,
+    required this.displayName,
+  });
 }
