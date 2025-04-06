@@ -65,35 +65,33 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   Future<List<LocationWithName>> _getLocationSuggestions(String query) async {
     if (query.isEmpty) return [];
     _searchDebounce?.cancel();
-    
+
     final completer = Completer<List<LocationWithName>>();
-    
+
     _searchDebounce = Timer(const Duration(milliseconds: 500), () async {
       try {
-        if (kIsWeb) {
-          final response = await http.get(
-            Uri.parse('https://nominatim.openstreetmap.org/search?q=$query, Addis Ababa&format=json&addressdetails=1')
-          );
+        final uri = Uri.parse(
+          'https://nominatim.openstreetmap.org/search?q=$query, Addis Ababa&format=json&addressdetails=1',
+        );
 
-          if (response.statusCode == 200) {
-            final data = json.decode(response.body) as List;
-            completer.complete(data.map((item) => LocationWithName(
-              latitude: double.parse(item['lat']),
-              longitude: double.parse(item['lon']),
-              displayName: item['display_name'] ?? '${item['lat']}, ${item['lon']}',
-            )).toList());
-          } else {
-            completer.complete([]);
-          }
+        final response = await http.get(uri, headers: {
+            'User-Agent': 'MetShare/1.0 (leoulendryas@gmail.com)', // update with real app/email
+        });
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body) as List;
+          final suggestions = data.map((item) => LocationWithName(
+            latitude: double.parse(item['lat']),
+            longitude: double.parse(item['lon']),
+            displayName: item['display_name'] ?? '${item['lat']}, ${item['lon']}',
+          )).toList();
+
+          completer.complete(suggestions);
         } else {
-          final placemarks = await locationFromAddress('$query, Addis Ababa');
-          final results = await Future.wait(
-            placemarks.map((p) => _createLocationWithName(p))
-          );
-          completer.complete(results);
+          completer.complete([]);
         }
       } catch (e) {
-        debugPrint('Geocoding error: $e');
+        debugPrint('OpenStreetMap error: $e');
         completer.complete([]);
       }
     });

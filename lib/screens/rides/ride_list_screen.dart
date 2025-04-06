@@ -114,39 +114,38 @@ class _RideListScreenState extends State<RideListScreen> {
   Future<List<LocationWithName>> _getLocationSuggestions(String query) async {
     if (query.isEmpty) return [];
     _searchDebounce?.cancel();
-    
+  
     final completer = Completer<List<LocationWithName>>();
-    
+  
     _searchDebounce = Timer(const Duration(milliseconds: 500), () async {
       try {
-        if (kIsWeb) {
-          final response = await http.get(
-            Uri.parse('https://nominatim.openstreetmap.org/search?q=$query, Addis Ababa&format=json&addressdetails=1')
-          );
-
-          if (response.statusCode == 200) {
-            final data = json.decode(response.body) as List;
-            completer.complete(data.map((item) => LocationWithName(
+        final response = await http.get(
+          Uri.parse(
+            'https://nominatim.openstreetmap.org/search?q=$query, Addis Ababa&format=json&addressdetails=1',
+          ),
+          headers: {
+            'User-Agent': 'MetShare/1.0 (leoulendryas@gmail.com)' // required by OSM Nominatim usage policy
+          },
+        );
+  
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body) as List;
+          completer.complete(data.map((item) {
+            return LocationWithName(
               latitude: double.parse(item['lat']),
               longitude: double.parse(item['lon']),
               displayName: item['display_name'] ?? '${item['lat']}, ${item['lon']}',
-            )).toList());
-          } else {
-            completer.complete([]);
-          }
+            );
+          }).toList());
         } else {
-          final placemarks = await locationFromAddress('$query, Addis Ababa');
-          final results = await Future.wait(
-            placemarks.map((p) => _createLocationWithName(p))
-          );
-          completer.complete(results);
+          completer.complete([]);
         }
       } catch (e) {
-        debugPrint('Geocoding error: $e');
+        debugPrint('OpenStreetMap geocoding error: $e');
         completer.complete([]);
       }
     });
-
+  
     return completer.future;
   }
 
