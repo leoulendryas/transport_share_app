@@ -104,6 +104,7 @@ class WebSocketService {
 
       _onConnected();
       debugPrint('WebSocket connected successfully');
+      _logWebSocketState();
     } on TimeoutException catch (e) {
       debugPrint('Connection timeout: $e');
       _handleError(e);
@@ -127,9 +128,32 @@ class WebSocketService {
     _pingTimer?.cancel();
     _pongTimeoutTimer?.cancel();
     
-    _pingTimer = Timer.periodic(_pingInterval, (_) {
-      if (_shouldSendPing()) {
-        _sendPing();
+    _pingTimer = Timer.periodic(_pingInterval, (_) async {
+      if (!_shouldSendPing()) return;
+      
+      try {
+        if (_channel?.closeCode != null) {
+          _handleError('Connection closed');
+          return;
+        }
+        
+        _channel!.sink.add(jsonEncode({
+          'type': 'ping',
+          'timestamp': DateTime.now().millisecondsSinceEpoch
+        }));
+        debugPrint('Sent ping to server');
+        
+        _pongTimeoutTimer?.cancel();
+        _pongTimeoutTimer = Timer(_pongTimeout, () {
+          if (_lastPongReceived == null || 
+              DateTime.now().difference(_lastPongReceived!) > _pongTimeout) {
+            debugPrint('Pong timeout - forcing reconnect');
+            _handleError('Pong timeout');
+          }
+        });
+      } catch (e, stackTrace) {
+        debugPrint('Ping failed: $e\n$stackTrace');
+        _handleError(e);
       }
     });
   }
@@ -138,28 +162,6 @@ class WebSocketService {
     return _channel != null && 
            connectionState.value == ConnectionState.connected && 
            !_isDisposing;
-  }
-
-  void _sendPing() {
-    try {
-      _channel!.sink.add(jsonEncode({
-        'type': 'ping',
-        'timestamp': DateTime.now().millisecondsSinceEpoch
-      }));
-      debugPrint('Sent ping to server');
-      
-      _pongTimeoutTimer?.cancel();
-      _pongTimeoutTimer = Timer(_pongTimeout, () {
-        if (_lastPongReceived == null || 
-            DateTime.now().difference(_lastPongReceived!) > _pongTimeout) {
-          debugPrint('Pong timeout - forcing reconnect');
-          _handleError('Pong timeout');
-        }
-      });
-    } catch (e) {
-      debugPrint('Ping failed: $e');
-      _handleError(e);
-    }
   }
 
   void _handleMessage(dynamic message) {
@@ -381,8 +383,14 @@ class WebSocketService {
     if (_isDisposing) return;
     
     debugPrint('WebSocket connection closed');
-    connectionState.value = ConnectionState.disconnected;
-    _scheduleReconnect();
+    _logWebSocketState();
+    
+    if (_channel?.closeCode == _wsNormalClosure) {
+      connectionState.value = ConnectionState.disconnected;
+    } else {
+      connectionState.value = ConnectionState.error;
+      _scheduleReconnect();
+    }
   }
 
   void _scheduleReconnect() {
@@ -412,7 +420,10 @@ class WebSocketService {
   }
 
   Future<void> sendMessage(String content) async {
-    if (_isDisposing || _channel == null || connectionState.value != ConnectionState.connected) {
+    if (_isDisposing || 
+        _channel == null || 
+        connectionState.value != ConnectionState.connected ||
+        _channel!.closeCode != null) {
       throw Exception('Cannot send message - WebSocket not connected');
     }
 
@@ -436,7 +447,10 @@ class WebSocketService {
   }
 
   void sendTypingStatus(bool isTyping) {
-    if (_isDisposing || _channel == null || connectionState.value != ConnectionState.connected) return;
+    if (_isDisposing || 
+        _channel == null || 
+        connectionState.value != ConnectionState.connected ||
+        _channel!.closeCode != null) return;
 
     try {
       final message = jsonEncode({
@@ -464,19 +478,22 @@ class WebSocketService {
       _cancelPendingReconnect();
       _pingTimer?.cancel();
       _pongTimeoutTimer?.cancel();
+      
+      // Set state before closing to prevent reconnect attempts
       connectionState.value = ConnectionState.disconnected;
-
+      
       await _subscription?.cancel();
       await _closeChannelSafely();
-      
+    } catch (e, stackTrace) {
+      debugPrint('Disposal error: $e\n$stackTrace');
+    } finally {
+      // Dispose of ValueNotifiers last
       messages.dispose();
       connectionState.dispose();
       connectionError.dispose();
       participantsCount.dispose();
       typingUsers.dispose();
-    } catch (e, stackTrace) {
-      debugPrint('Disposal error: $e\n$stackTrace');
-    } finally {
+      
       _disposeCompleter!.complete();
       _isDisposing = false;
     }
@@ -491,17 +508,17 @@ class WebSocketService {
     _channel = null;
 
     try {
-      await channel.sink.close(_wsGoingAway)
+      // Use normal closure code for client-initiated disconnects
+      await channel.sink.close(_wsNormalClosure, 'Client disconnected')
           .timeout(const Duration(seconds: 2), onTimeout: () {
         debugPrint('WebSocket close timed out, forcing closure');
-        channel.sink.close();
+        channel.sink.close(_wsInternalError);
       });
-    } catch (e) {
-      debugPrint('Error closing WebSocket channel: $e');
+    } catch (e, stackTrace) {
+      debugPrint('Error closing WebSocket channel: $e\n$stackTrace');
+      // Ensure the channel is closed even if there's an error
       try {
-        if (channel.closeCode != null && channel.closeCode != _wsNormalClosure) {
-          channel.sink.close(_wsInternalError);
-        }
+        channel.sink.close(_wsInternalError);
       } catch (_) {}
     }
   }
@@ -509,6 +526,16 @@ class WebSocketService {
   void _cancelPendingReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    _reconnectAttempts = 0;
+  }
+
+  void _logWebSocketState() {
+    debugPrint('''
+WebSocket State:
+  Connection: ${connectionState.value}
+  Close Code: ${_channel?.closeCode}
+  Close Reason: ${_channel?.closeReason}
+  Is Closing: ${_channel?.sink.done}
+  Reconnect Attempts: $_reconnectAttempts
+''');
   }
 }

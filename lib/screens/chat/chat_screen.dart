@@ -41,7 +41,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _typingTimer;
   final Map<String, String> _participantEmails = {};
   final Map<String, String> _participantNames = {};
-  StreamSubscription? _connectionErrorSubscription;
 
   @override
   void initState() {
@@ -72,40 +71,41 @@ class _ChatScreenState extends State<ChatScreen> {
     _webSocketService.connectionState.addListener(_handleConnectionChange);
     _webSocketService.typingUsers.addListener(_handleTypingUsersChange);
     _webSocketService.participantsCount.addListener(_updateParticipantsCount);
+    
+    // Listen for connection errors
+    _webSocketService.connectionError.addListener(() {
+      if (_webSocketService.connectionError.value != null && mounted) {
+        _showErrorSnackbar(_webSocketService.connectionError.value!);
+      }
+    });
   }
 
   Future<void> _initializeChat() async {
-   try {
-     _webSocketService = ws.WebSocketService(
-       rideId: widget.rideId,
-       token: _authService.token!,
-       baseUrl: 'ws://localhost:5000',
-     );
+    try {
+      _webSocketService = ws.WebSocketService(
+        rideId: widget.rideId,
+        token: _authService.token!,
+        baseUrl: 'ws://localhost:5000', // Replace with your actual WebSocket URL
+      );
 
-     await Future.wait([
-       _loadParticipants(),
-       _checkRideStatus(),
-       _fetchMessageHistory(),
-     ]);
+      await Future.wait([
+        _loadParticipants(),
+        _checkRideStatus(),
+        _fetchMessageHistory(),
+      ]);
 
-     _setupWebSocketListeners();
+      _setupWebSocketListeners();
 
-     _webSocketService.connectionError.addListener(() {
-       if (_webSocketService.connectionError.value != null && mounted) {
-         _showErrorSnackbar(_webSocketService.connectionError.value!);
-       }
-     });
-
-     if (mounted) {
-       setState(() => _isLoading = false);
-     }
-   } catch (e, stackTrace) {
-     debugPrint('Error initializing chat: $e\n$stackTrace');
-     if (mounted) {
-       _showErrorSnackbar('Failed to initialize chat');
-       setState(() => _isLoading = false);
-     }
-   }
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error initializing chat: $e\n$stackTrace');
+      if (mounted) {
+        _showErrorSnackbar('Failed to initialize chat');
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   void _updateMessages() {
@@ -247,7 +247,7 @@ class _ChatScreenState extends State<ChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.red[800],
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         action: SnackBarAction(
@@ -268,13 +268,7 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: Colors.purple[800],
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        action: SnackBarAction(
-          label: 'OK',
-          textColor: Colors.white,
-          onPressed: () {},
-        ),
-      ),
-    );
+    ));
   }
 
   @override
@@ -283,11 +277,11 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
     _messageFocusNode.dispose();
     _typingTimer?.cancel();
-    _connectionErrorSubscription?.cancel();
     _webSocketService.messages.removeListener(_updateMessages);
     _webSocketService.connectionState.removeListener(_handleConnectionChange);
     _webSocketService.typingUsers.removeListener(_handleTypingUsersChange);
     _webSocketService.participantsCount.removeListener(_updateParticipantsCount);
+    _webSocketService.connectionError.removeListener(() {});
     _webSocketService.dispose();
     super.dispose();
   }
@@ -439,11 +433,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return ListView.builder(
       controller: _scrollController,
-      reverse: true,
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: _messages.length,
       itemBuilder: (context, index) {
-        final message = _messages.reversed.toList()[index];
+        final message = _messages[index];
 
         return MessageBubble(
           key: ValueKey(message.id),
