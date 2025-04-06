@@ -6,6 +6,7 @@ import '../models/user.dart';
 import '../models/message.dart';
 import 'auth_service.dart';
 import '../models/lat_lng.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -135,16 +136,21 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getUserActiveRides({
-    int page = 1,
-    int limit = 10,
+    required int page,
+    required int limit,
   }) async {
     try {
       final headers = await _getHeaders();
       
-      // Verify authorization header exists
-      if (!headers.containsKey('Authorization')) {
-        throw ApiException('Authentication required', 401);
+      // Get the Authorization token from wherever you store it (e.g., SharedPreferences, LocalStorage, etc.)
+      final token = await _getAuthToken(); // Replace with your method to get the token
+      
+      if (token == null) {
+        throw ApiException('Authorization token is missing', 401);
       }
+  
+      // Add the Authorization token to the headers
+      headers['Authorization'] = 'Bearer $token';
   
       final queryParams = {
         'page': page.toString(),
@@ -153,11 +159,11 @@ class ApiService {
   
       final uri = Uri.parse('$baseUrl/rides/user/active-rides')
           .replace(queryParameters: queryParams);
-          
+  
       print('Making request to: ${uri.toString()}'); // Debug print
-      
+  
       final response = await http.get(uri, headers: headers);
-      
+  
       print('Response status: ${response.statusCode}'); // Debug print
       print('Response body: ${response.body}'); // Debug print
   
@@ -166,7 +172,7 @@ class ApiService {
       } else {
         final errorData = jsonDecode(response.body) as Map<String, dynamic>;
         throw ApiException(
-          errorData['error'] ?? 'Failed to load user rides',
+          errorData['error'] ?? 'Failed to load user active rides',
           response.statusCode,
         );
       }
@@ -435,5 +441,10 @@ class ApiService {
     } catch (e) {
       throw ApiException('Network error: $e', 0);
     }
+  }
+
+  Future<String?> _getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token'); // Assuming the token is stored with this key
   }
 }
