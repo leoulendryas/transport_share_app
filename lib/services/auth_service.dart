@@ -37,20 +37,23 @@ class AuthService extends ChangeNotifier {
       _refreshToken = _prefs?.getString(_refreshTokenKey);
       _userId = _prefs?.getString(_userIdKey);
       _email = _prefs?.getString(_emailKey);
-      
       final expiryString = _prefs?.getString(_tokenExpiryKey);
       if (expiryString != null) {
         _tokenExpiry = DateTime.parse(expiryString);
       }
-      
+
       _initialized = true;
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to initialize AuthService: $e');
-      _initialized = true; // Mark as initialized even if failed
+      _initialized = true;
       notifyListeners();
       rethrow;
     }
+  }
+
+  Future<void> ensureInitialized() async {
+    if (!_initialized) await init();
   }
 
   Future<void> register({
@@ -58,6 +61,7 @@ class AuthService extends ChangeNotifier {
     required String password,
     String? name,
   }) async {
+    await ensureInitialized();
     _validateEmail(email);
     _validatePassword(password);
 
@@ -76,6 +80,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> login(String email, String password) async {
+    await ensureInitialized();
     _validateEmail(email);
     _validatePassword(password);
 
@@ -93,6 +98,8 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<String?> refreshAuthToken() async {
+    await ensureInitialized();
+
     if (_refreshToken == null) return null;
 
     try {
@@ -106,10 +113,9 @@ class AuthService extends ChangeNotifier {
         final data = jsonDecode(response.body);
         _token = data['token'];
         _tokenExpiry = _calculateExpiry(data['expiresIn'] ?? 3600);
-        
         await _prefs?.setString(_tokenKey, _token!);
         await _prefs?.setString(_tokenExpiryKey, _tokenExpiry!.toIso8601String());
-        
+
         notifyListeners();
         return _token;
       } else {
@@ -124,6 +130,8 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await ensureInitialized();
+
     try {
       if (_token != null && !_isTokenExpired) {
         await http.post(
@@ -132,15 +140,15 @@ class AuthService extends ChangeNotifier {
         ).timeout(const Duration(seconds: 5));
       }
     } catch (e) {
-      debugPrint('Error during logout API call: $e');
+      debugPrint('Logout API error: $e');
     } finally {
       await _clearAuthData();
     }
   }
 
   Future<bool> tryAutoLogin() async {
-    if (!_initialized) await init();
-    
+    await ensureInitialized();
+
     if (_token == null || _isTokenExpired) {
       if (_refreshToken != null) {
         try {
@@ -188,9 +196,7 @@ class AuthService extends ChangeNotifier {
       _refreshToken = data['refreshToken'] ?? _refreshToken;
       _tokenExpiry = _calculateExpiry(data['expiresIn'] ?? 3600);
 
-      if (_prefs == null) {
-        await init();
-      }
+      await ensureInitialized();
 
       final futures = <Future>[
         _prefs!.setString(_tokenKey, _token!),
@@ -212,9 +218,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _clearAuthData() async {
-    if (_prefs == null) {
-      await init();
-    }
+    await ensureInitialized();
 
     final futures = <Future>[
       _prefs!.remove(_tokenKey),
@@ -235,8 +239,8 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<Map<String, String>> getAuthHeaders() async {
-    if (!_initialized) await init();
-    
+    await ensureInitialized();
+
     if (!isAuthenticated) {
       if (_refreshToken != null) {
         await refreshAuthToken();

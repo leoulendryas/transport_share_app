@@ -43,6 +43,39 @@ class ApiService {
     }
   }
 
+  Future<http.Response> _makeAuthenticatedRequest(
+    Future<http.Response> Function() requestFn,
+  ) async {
+    // First attempt
+    final firstResponse = await requestFn();
+    
+    // If not unauthorized, return the response
+    if (firstResponse.statusCode != 401) {
+      return firstResponse;
+    }
+
+    // Attempt to refresh token
+    try {
+      if (kDebugMode) {
+        print('Attempting token refresh due to 401 response');
+      }
+      
+      final newToken = await authService.refreshAuthToken();
+      if (newToken == null) {
+        throw ApiException('Authentication required', 401);
+      }
+
+      // Retry with new token
+      final retryResponse = await requestFn();
+      return retryResponse;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Token refresh failed: $e');
+      }
+      return firstResponse; // Return original 401 response if refresh fails
+    }
+  }
+
   Future<Map<String, dynamic>> getRides({
     required double fromLat,
     required double fromLng,
@@ -72,7 +105,9 @@ class ApiService {
         print('GET Rides URL: ${uri.toString()}');
       }
 
-      final response = await http.get(uri, headers: headers);
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(uri, headers: headers),
+      );
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
@@ -121,10 +156,12 @@ class ApiService {
         if (departureTime != null) 'departure_time': departureTime.toIso8601String(),
       };
   
-      final response = await http.post(
-        Uri.parse('$baseUrl/rides'),
-        headers: headers,
-        body: jsonEncode(requestBody),
+      final response = await _makeAuthenticatedRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/rides'),
+          headers: headers,
+          body: jsonEncode(requestBody),
+        ),
       );
   
       if (response.statusCode == 201) {
@@ -140,6 +177,8 @@ class ApiService {
       throw ApiException('Network error: $e', 0);
     }
   }
+
+  // [Previous methods remain the same until getUserActiveRides]
 
   Future<Map<String, dynamic>> getUserActiveRides({
     required int page,
@@ -160,7 +199,9 @@ class ApiService {
         print('GET Active Rides URL: ${uri.toString()}');
       }
   
-      final response = await http.get(uri, headers: headers);
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(uri, headers: headers),
+      );
   
       if (kDebugMode) {
         print('Active Rides Response: ${response.statusCode}');
@@ -184,12 +225,16 @@ class ApiService {
     }
   }
 
+  // [Update all other methods similarly, wrapping the http calls with _makeAuthenticatedRequest]
+
   Future<void> joinRide(String rideId) async {
     try {
       final headers = await _getHeaders();
-      final response = await http.post(
-        Uri.parse('$baseUrl/rides/$rideId/join'),
-        headers: headers,
+      final response = await _makeAuthenticatedRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/rides/$rideId/join'),
+          headers: headers,
+        ),
       );
 
       if (response.statusCode != 200) {
@@ -206,9 +251,11 @@ class ApiService {
   Future<void> leaveRide(String rideId) async {
     try {
       final headers = await _getHeaders();
-      final response = await http.post(
-        Uri.parse('$baseUrl/rides/$rideId/leave'),
-        headers: headers,
+      final response = await _makeAuthenticatedRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/rides/$rideId/leave'),
+          headers: headers,
+        ),
       );
 
       if (response.statusCode != 200) {
@@ -225,9 +272,11 @@ class ApiService {
   Future<void> cancelRide(String rideId) async {
     try {
       final headers = await _getHeaders();
-      final response = await http.post(
-        Uri.parse('$baseUrl/rides/$rideId/cancel'),
-        headers: headers,
+      final response = await _makeAuthenticatedRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/rides/$rideId/cancel'),
+          headers: headers,
+        ),
       );
 
       if (response.statusCode != 200) {
@@ -244,9 +293,11 @@ class ApiService {
   Future<List<Message>> getMessages(String rideId) async {
     try {
       final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
-        headers: headers,
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
+          headers: headers,
+        ),
       );
 
       final responseBody = jsonDecode(response.body);
@@ -283,10 +334,12 @@ class ApiService {
       }
 
       final headers = await _getHeaders();
-      final response = await http.post(
-        Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
-        headers: headers,
-        body: jsonEncode({'content': content}),
+      final response = await _makeAuthenticatedRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
+          headers: headers,
+          body: jsonEncode({'content': content}),
+        ),
       );
 
       final responseBody = jsonDecode(response.body);
@@ -310,14 +363,16 @@ class ApiService {
   Future<void> sendSos(String rideId, double lat, double lng) async {
     try {
       final headers = await _getHeaders();
-      final response = await http.post(
-        Uri.parse('$baseUrl/sos'),
-        headers: headers,
-        body: jsonEncode({
-          'ride_id': rideId,
-          'latitude': lat,
-          'longitude': lng,
-        }),
+      final response = await _makeAuthenticatedRequest(
+        () => http.post(
+          Uri.parse('$baseUrl/sos'),
+          headers: headers,
+          body: jsonEncode({
+            'ride_id': rideId,
+            'latitude': lat,
+            'longitude': lng,
+          }),
+        ),
       );
 
       if (response.statusCode != 201) {
@@ -334,9 +389,11 @@ class ApiService {
   Future<Ride> getRideDetails(String rideId) async {
     try {
       final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/rides/$rideId'),
-        headers: headers,
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/rides/$rideId'),
+          headers: headers,
+        ),
       );
 
       if (response.statusCode == 200) {
@@ -356,9 +413,11 @@ class ApiService {
   Future<Map<String, dynamic>> checkRideParticipation(String rideId) async {
     try {
       final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/rides/$rideId/check-participation'),
-        headers: headers,
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/rides/$rideId/check-participation'),
+          headers: headers,
+        ),
       );
   
       if (response.statusCode == 200) {
@@ -377,9 +436,11 @@ class ApiService {
   Future<Map<String, dynamic>> getUserProfile() async {
     try {
       final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/profile'),
-        headers: headers,
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/profile'),
+          headers: headers,
+        ),
       );
 
       if (response.statusCode == 200) {
@@ -398,9 +459,11 @@ class ApiService {
   Future<List<dynamic>> getCompanies() async {
     try {
       final headers = await _getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/companies'),
-        headers: headers,
+      final response = await _makeAuthenticatedRequest(
+        () => http.get(
+          Uri.parse('$baseUrl/companies'),
+          headers: headers,
+        ),
       );
 
       if (response.statusCode == 200) {
@@ -408,28 +471,6 @@ class ApiService {
       } else {
         throw ApiException(
           jsonDecode(response.body)['error'] ?? 'Failed to load companies',
-          response.statusCode,
-        );
-      }
-    } catch (e) {
-      throw ApiException('Network error: $e', 0);
-    }
-  }
-
-  Future<String> refreshToken(String refreshToken) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/refresh-token'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': refreshToken}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['token'] as String;
-      } else {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to refresh token',
           response.statusCode,
         );
       }

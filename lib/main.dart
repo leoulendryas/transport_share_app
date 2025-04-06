@@ -8,32 +8,23 @@ import 'services/location_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize services with error handling
-  try {
-    // Create an instance of AuthService and initialize it
-    final authService = AuthService();
-    await authService.init(); // Ensure init() is called
+  final authService = AuthService();
+  await authService.init(); // Await before runApp to ensure user state is ready
 
-    runApp(
-      MultiProvider(
-        providers: [
-          // Provide AuthService
-          ChangeNotifierProvider<AuthService>(
-            create: (_) => authService,
-          ),
-          // Provide ApiService (depends on AuthService)
-          ProxyProvider<AuthService, ApiService>(
-            update: (context, authService, _) => ApiService(authService),
-          ),
-          // Provide LocationService
-          Provider<LocationService>(
-            create: (_) => LocationService(),
-          ),
-        ],
-        child: const MyApp(),
-      ),
-    );
-  } catch (e) {
-    print('Error initializing app: $e');
-  }
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthService>.value(
+          value: authService,
+        ),
+        ProxyProvider<AuthService, ApiService>(
+          update: (context, auth, _) => ApiService(auth),
+        ),
+        Provider<LocationService>(
+          create: (_) => LocationService(),
+        ),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }

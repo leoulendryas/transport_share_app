@@ -12,25 +12,22 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => AuthService()..init(),
-      child: MaterialApp(
-        title: 'Ride Share',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-          fontFamily: 'Roboto',
-        ),
-        initialRoute: '/',
-        routes: {
-          '/': (context) => const AuthWrapper(),
-          '/rides': (context) => const RideListScreen(),
-          '/login': (context) => const LoginScreen(),
-          '/register': (context) => const RegisterScreen(),
-          '/create-ride': (context) => const CreateRideScreen(),
-          '/sos': (context) => const SosScreen(rideId: 'defaultRideId'),
-        },
+    return MaterialApp(
+      title: 'Ride Share',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        fontFamily: 'Roboto',
       ),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const AuthWrapper(),
+        '/rides': (context) => const RideListScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/create-ride': (context) => const CreateRideScreen(),
+        '/sos': (context) => const SosScreen(rideId: 'defaultRideId'),
+      },
     );
   }
 }
@@ -41,8 +38,7 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    
-    // Check if we're authenticated
+
     if (authService.isAuthenticated) {
       return const RideListScreen();
     } else {
