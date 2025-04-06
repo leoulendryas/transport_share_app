@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService extends ChangeNotifier {
-  static const String _baseUrl = 'http://localhost:5000';
+  static const String _baseUrl = 'https://transport-share-backend.onrender.com';
   static const String _tokenKey = 'auth_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userIdKey = 'user_id';

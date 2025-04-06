@@ -85,7 +85,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _webSocketService = ws.WebSocketService(
         rideId: widget.rideId,
         token: _authService.token!,
-        baseUrl: 'ws://localhost:5000', // Replace with your actual WebSocket URL
+        baseUrl: 'wss://transport-share-backend.onrender.com', // Replace with your actual WebSocket URL
       );
 
       await Future.wait([
