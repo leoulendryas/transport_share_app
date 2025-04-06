@@ -42,44 +42,94 @@ class Ride {
   });
 
   factory Ride.fromJson(Map<String, dynamic> json) {
-    // Handle potential null values with defaults
-    final participants = json['participants'] is int 
+    // Parse locations - handle both WKB and separate lat/lng formats
+    final fromLocation = _parseLocation(
+      wkb: json['from_location'] as String?,
+      lat: json['from_lat'] as num?,
+      lng: json['from_lng'] as num?,
+    );
+
+    final toLocation = _parseLocation(
+      wkb: json['to_location'] as String?,
+      lat: json['to_lat'] as num?,
+      lng: json['to_lng'] as num?,
+    );
+
+    // Handle participants with null safety
+    final participants = json['participants'] is int
         ? json['participants'] as int
         : int.tryParse(json['participants'].toString()) ?? 0;
 
-    // Ensure company_ids is always a List<int>
+    // Handle company IDs with null safety
     final companyIds = (json['company_ids'] as List<dynamic>?)
         ?.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0)
         .where((e) => e != 0)
         .toList() ?? [];
 
+    // Handle status with null safety
+    final status = json['status'] != null
+        ? _parseRideStatus(json['status'] as String)
+        : RideStatus.active;
+
+    // Handle driver email with null safety
+    final driverEmail = json['driver_email'] as String? ?? '';
+
     return Ride(
       id: json['id'] as int,
       driverId: json['driver_id'] as int,
-      fromLocation: LatLng(
-        (json['from_lat'] as num).toDouble(), 
-        (json['from_lng'] as num).toDouble(),
-      ),
-      fromAddress: json['from_address'] as String,
-      toLocation: LatLng(
-        (json['to_lat'] as num).toDouble(),
-        (json['to_lng'] as num).toDouble(),
-      ),
-      toAddress: json['to_address'] as String,
-      totalSeats: json['total_seats'] as int,
-      seatsAvailable: json['seats_available'] as int,
+      fromLocation: fromLocation ?? LatLng(0, 0), // Removed const
+      fromAddress: json['from_address'] as String? ?? '',
+      toLocation: toLocation ?? LatLng(0, 0), // Removed const
+      toAddress: json['to_address'] as String? ?? '',
+      totalSeats: (json['total_seats'] as num?)?.toInt() ?? 0,
+      seatsAvailable: (json['seats_available'] as num?)?.toInt() ?? 0,
       departureTime: json['departure_time'] != null
           ? DateTime.tryParse(json['departure_time'] as String)
-          : null, // Handle null departure time
-      status: RideStatus.values.firstWhere(
-        (e) => e.toString().split('.').last == json['status'],
-        orElse: () => RideStatus.active,
-      ),
+          : null,
+      status: status,
       createdAt: DateTime.parse(json['created_at'] as String),
-      driverEmail: json['driver_email'] as String,
+      driverEmail: driverEmail,
       participants: participants,
       companyIds: companyIds,
     );
+  }
+
+  static LatLng? _parseLocation({
+    String? wkb,
+    num? lat,
+    num? lng,
+  }) {
+    // First try separate lat/lng fields
+    if (lat != null && lng != null) {
+      return LatLng(lat.toDouble(), lng.toDouble());
+    }
+
+    // Fall back to WKB parsing if available
+    if (wkb != null) {
+      return _parseWkbLocation(wkb);
+    }
+
+    return null;
+  }
+
+  static LatLng? _parseWkbLocation(String wkb) {
+    // Simplified WKB parsing - adjust based on your actual WKB format
+    try {
+      // This is a placeholder - implement proper WKB parsing for your needs
+      // Real WKB parsing would need to handle the binary format properly
+      final coords = wkb.split(RegExp(r'[^0-9.-]+'))
+          .where((s) => s.isNotEmpty)
+          .map(double.tryParse)
+          .whereType<double>()
+          .toList();
+      
+      if (coords.length >= 2) {
+        return LatLng(coords[0], coords[1]);
+      }
+    } catch (e) {
+      // Removed print statement - consider using a logger in production
+    }
+    return null;
   }
 
   static RideStatus _parseRideStatus(String status) {
@@ -149,7 +199,8 @@ class Ride {
 
   @override
   String toString() {
-    return 'Ride(id: $id, driverId: $driverId, from: $fromAddress, to: $toAddress, '
-        'seats: $seatsAvailable/$totalSeats, departs: $departureTime)';
+    return 'Ride(id: $id, driverId: $driverId, from: $fromAddress, '
+        'to: $toAddress, seats: $seatsAvailable/$totalSeats, '
+        'departs: ${departureTime?.toIso8601String()})';
   }
 }
