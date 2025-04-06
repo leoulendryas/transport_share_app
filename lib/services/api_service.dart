@@ -19,21 +19,30 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  final String baseUrl = 'https://transport-share-backend.onrender.com'; // Update with your backend URL
+  final String baseUrl = 'https://transport-share-backend.onrender.com';
   final AuthService authService;
 
   ApiService(this.authService);
 
   Future<Map<String, String>> _getHeaders() async {
-    final token = await authService.token;
-    return {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
+    try {
+      final token = await authService.token;
+      if (kDebugMode) {
+        print('Current auth token: ${token != null ? 'exists' : 'null'}');
+      }
+      return {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error getting headers: $e');
+      }
+      rethrow;
+    }
   }
 
-  // Enhanced ride fetching with pagination support
   Future<Map<String, dynamic>> getRides({
     required double fromLat,
     required double fromLng,
@@ -54,15 +63,19 @@ class ApiService {
         'radius': radius.toString(),
         'page': page.toString(),
         'limit': limit.toString(),
+        'timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
         if (companyId != null) 'company_id': companyId.toString(),
       };
 
       final uri = Uri.parse('$baseUrl/rides').replace(queryParameters: queryParams);
+      if (kDebugMode) {
+        print('GET Rides URL: ${uri.toString()}');
+      }
+
       final response = await http.get(uri, headers: headers);
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data; // Return raw JSON without converting to Ride objects here
+        return jsonDecode(response.body) as Map<String, dynamic>;
       } else {
         final errorData = jsonDecode(response.body) as Map<String, dynamic>;
         throw ApiException(
@@ -85,7 +98,7 @@ class ApiService {
     required String fromAddress,
     required String toAddress,
     required int seats,
-    required DateTime? departureTime, // Nullable
+    required DateTime? departureTime,
     required List<int> companies,
   }) async {
     try {
@@ -93,14 +106,11 @@ class ApiService {
         throw ApiException('Seats must be between 1 and 8', 400);
       }
   
-      // Ensure departureTime is either null or in the future
       if (departureTime != null && departureTime.isBefore(DateTime.now())) {
         throw ApiException('Departure time must be in the future', 400);
       }
   
       final headers = await _getHeaders();
-      
-      // Construct request body
       final requestBody = {
         'from': {'lat': from.latitude, 'lng': from.longitude},
         'to': {'lat': to.latitude, 'lng': to.longitude},
@@ -108,12 +118,8 @@ class ApiService {
         'from_address': fromAddress,
         'to_address': toAddress,
         'companies': companies,
+        if (departureTime != null) 'departure_time': departureTime.toIso8601String(),
       };
-  
-      // Only include departure_time if it's not null
-      if (departureTime != null) {
-        requestBody['departure_time'] = departureTime.toIso8601String();
-      }
   
       final response = await http.post(
         Uri.parse('$baseUrl/rides'),
@@ -141,31 +147,24 @@ class ApiService {
   }) async {
     try {
       final headers = await _getHeaders();
-      
-      // Get the Authorization token from wherever you store it (e.g., SharedPreferences, LocalStorage, etc.)
-      final token = await _getAuthToken(); // Replace with your method to get the token
-      
-      if (token == null) {
-        throw ApiException('Authorization token is missing', 401);
-      }
-  
-      // Add the Authorization token to the headers
-      headers['Authorization'] = 'Bearer $token';
-  
       final queryParams = {
         'page': page.toString(),
         'limit': limit.toString(),
+        'timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
       };
   
       final uri = Uri.parse('$baseUrl/rides/user/active-rides')
           .replace(queryParameters: queryParams);
   
-      print('Making request to: ${uri.toString()}'); // Debug print
+      if (kDebugMode) {
+        print('GET Active Rides URL: ${uri.toString()}');
+      }
   
       final response = await http.get(uri, headers: headers);
   
-      print('Response status: ${response.statusCode}'); // Debug print
-      print('Response body: ${response.body}'); // Debug print
+      if (kDebugMode) {
+        print('Active Rides Response: ${response.statusCode}');
+      }
   
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
@@ -258,7 +257,6 @@ class ApiService {
               .map((msg) => Message.fromJson(msg as Map<String, dynamic>))
               .toList();
         } else if (responseBody is List) {
-          // Handle case where response is directly a list
           return responseBody
               .map((msg) => Message.fromJson(msg as Map<String, dynamic>))
               .toList();
@@ -285,8 +283,6 @@ class ApiService {
       }
 
       final headers = await _getHeaders();
-      headers['Content-Type'] = 'application/json';
-
       final response = await http.post(
         Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
         headers: headers,
@@ -335,7 +331,6 @@ class ApiService {
     }
   }
 
-  // In your ApiService class
   Future<Ride> getRideDetails(String rideId) async {
     try {
       final headers = await _getHeaders();
@@ -441,10 +436,5 @@ class ApiService {
     } catch (e) {
       throw ApiException('Network error: $e', 0);
     }
-  }
-
-  Future<String?> _getAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token'); // Assuming the token is stored with this key
   }
 }
