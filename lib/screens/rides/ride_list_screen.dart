@@ -240,13 +240,16 @@ class _RideListScreenState extends State<RideListScreen> {
             TypeAheadField<LocationWithName>(
               controller: _fromController,
               suggestionsCallback: _getLocationSuggestions,
-              itemBuilder: (_, location) => ListTile(
-                leading: const Icon(Icons.location_on, color: Colors.purple),
-                title: Text(
-                  location.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white),
+              itemBuilder: (_, location) => Container(
+                color: Colors.black, // 👈 dark background for suggestion item
+                child: ListTile(
+                  leading: const Icon(Icons.location_on, color: Colors.purple),
+                  title: Text(
+                    location.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
               onSelected: (location) {
@@ -254,7 +257,7 @@ class _RideListScreenState extends State<RideListScreen> {
                   _selectedFromLocation = LatLng(location.latitude, location.longitude);
                   _fromController.text = location.displayName;
                 });
-                _search();
+                _search(); // 👈 keep your search call
               },
               builder: (context, controller, focusNode) => TextFormField(
                 controller: controller,
@@ -297,13 +300,16 @@ class _RideListScreenState extends State<RideListScreen> {
             TypeAheadField<LocationWithName>(
               controller: _toController,
               suggestionsCallback: _getLocationSuggestions,
-              itemBuilder: (_, location) => ListTile(
-                leading: const Icon(Icons.flag, color: Colors.purple),
-                title: Text(
-                  location.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white),
+              itemBuilder: (_, location) => Container(
+                color: Colors.black, // 👈 dark suggestion item background
+                child: ListTile(
+                  leading: const Icon(Icons.flag, color: Colors.purple),
+                  title: Text(
+                    location.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
               onSelected: (location) {

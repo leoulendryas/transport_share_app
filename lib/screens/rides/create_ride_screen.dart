@@ -387,15 +387,20 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
             TypeAheadField<LocationWithName>(
               controller: _fromController,
               suggestionsCallback: _getLocationSuggestions,
-              itemBuilder: (_, location) => ListTile(
-                leading: Icon(Icons.location_on, color: Colors.purple),
-                title: Text(
-                  location.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
+              itemBuilder: (context, location) {
+                return Container(
+                  color: Colors.black, // 👈 set background for each item
+                  child: ListTile(
+                    leading: Icon(Icons.location_on, color: Colors.purple),
+                    title: Text(
+                      location.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                );
+              },
               onSelected: (location) {
                 setState(() {
                   _selectedFromLocation = LatLng(
@@ -405,54 +410,59 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                   _fromController.text = location.displayName;
                 });
               },
-              builder: (context, controller, focusNode) => TextFormField(
-                controller: controller,
-                focusNode: focusNode,
-                style: TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Pickup Location',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  prefixIcon: Icon(Icons.location_on, color: Colors.purple),
-                  suffixIcon: _fromController.text.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.6)),
-                          onPressed: () {
-                            setState(() {
-                              _fromController.clear();
-                              _selectedFromLocation = null;
-                            });
-                          },
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: Colors.black.withOpacity(0.4),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+              builder: (context, controller, focusNode) {
+                return TextFormField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  style: TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Pickup Location',
+                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                    prefixIcon: Icon(Icons.location_on, color: Colors.purple),
+                    suffixIcon: _fromController.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.6)),
+                            onPressed: () {
+                              setState(() {
+                                _fromController.clear();
+                                _selectedFromLocation = null;
+                              });
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.black.withOpacity(0.4),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.purple),
+                    ),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.purple),
-                  ),
-                ),
-                validator: (value) => value!.isEmpty ? 'Required' : null,
-              ),
+                  validator: (value) => value!.isEmpty ? 'Required' : null,
+                );
+              },
             ),
             const SizedBox(height: 16),
             TypeAheadField<LocationWithName>(
               controller: _toController,
               suggestionsCallback: _getLocationSuggestions,
-              itemBuilder: (_, location) => ListTile(
-                leading: Icon(Icons.flag, color: Colors.purple),
-                title: Text(
-                  location.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.white),
+              itemBuilder: (_, location) => Container(
+                color: Colors.black, // 👈 Background color for each suggestion item
+                child: ListTile(
+                  leading: Icon(Icons.flag, color: Colors.purple),
+                  title: Text(
+                    location.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
               onSelected: (location) {
