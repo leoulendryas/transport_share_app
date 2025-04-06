@@ -16,10 +16,12 @@ class RideCard extends StatelessWidget {
   const RideCard({
     super.key, 
     required this.ride, 
-    required this.onTap
+    required this.onTap,
   });
 
   Color _getStatusColor() {
+    if (ride.seatsAvailable <= 0) return Colors.orange; // Full ride color
+    
     final status = RideStatus.values.firstWhere(
       (e) => e.toString().split('.').last == ride.status,
       orElse: () => RideStatus.pending,
@@ -35,35 +37,26 @@ class RideCard extends StatelessWidget {
     }
   }
 
-  Widget _buildCompanies(List<int> companyIds) {
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      children: companyIds.map((id) => CompanyChip(
-        companyName: companies[id] ?? 'Unknown',
-        color: Colors.purple[800]!,
-      )).toList(),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final peopleSharing = ride.totalSeats - 1;
-    final availableSharing = ride.seatsAvailable - 1;
+    final availableSharing = ride.seatsAvailable;
+    final isFull = ride.seatsAvailable <= 0;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       elevation: 0,
-      color: Colors.black.withOpacity(0.7),
+      color: Colors.black.withOpacity(isFull ? 0.5 : 0.7),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: Colors.purple.withOpacity(0.3),
+          color: isFull ? Colors.orange : Colors.purple.withOpacity(0.3),
+          width: isFull ? 1.5 : 1.0,
         ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        onTap: onTap, // Keep clickable even when full
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -75,40 +68,61 @@ class RideCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${ride.fromAddress.split(',').first} → ${ride.toAddress.split(',').first}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: isFull ? Colors.white.withOpacity(0.8) : Colors.white,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  CompanyChip(
-                    companyName: ride.status.toString().split('.').last.toUpperCase(),
-                    color: _getStatusColor(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isFull ? Colors.orange.withOpacity(0.2) : _getStatusColor().withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _getStatusColor(),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      isFull ? 'FULL' : ride.status.toString().split('.').last.toUpperCase(),
+                      style: TextStyle(
+                        color: _getStatusColor(),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.people_outline, size: 16, color: Colors.white.withOpacity(0.6)),
+                  Icon(
+                    Icons.people_outline, 
+                    size: 16, 
+                    color: isFull ? Colors.orange : Colors.white.withOpacity(0.6),
+                  ),
                   const SizedBox(width: 4),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Shared with ${peopleSharing.clamp(0, peopleSharing)} ${peopleSharing == 1 ? 'person' : 'people'}',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: isFull ? Colors.orange : Colors.white,
                           fontSize: 14,
                         ),
                       ),
                       Text(
-                        '${availableSharing.clamp(0, availableSharing)} spot${availableSharing != 1 ? 's' : ''} available',
+                        isFull 
+                          ? 'Ride is full' 
+                          : '$availableSharing spot${availableSharing != 1 ? 's' : ''} available',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
+                          color: isFull ? Colors.orange : Colors.white.withOpacity(0.6),
                           fontSize: 12,
                         ),
                       ),
@@ -116,12 +130,16 @@ class RideCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   if (ride.departureTime != null) ...[
-                    Icon(Icons.access_time, size: 16, color: Colors.white.withOpacity(0.6)),
+                    Icon(
+                      Icons.access_time, 
+                      size: 16, 
+                      color: isFull ? Colors.orange : Colors.white.withOpacity(0.6),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       DateFormat('MMM d, h:mm a').format(ride.departureTime!),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: isFull ? Colors.orange : Colors.white,
                         fontSize: 14,
                       ),
                     ),
@@ -129,7 +147,7 @@ class RideCard extends StatelessWidget {
                     Text(
                       'No departure time',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
+                        color: isFull ? Colors.orange : Colors.white.withOpacity(0.6),
                         fontSize: 14,
                       ),
                     ),
@@ -138,7 +156,14 @@ class RideCard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               if (ride.companyIds.isNotEmpty) ...[
-                _buildCompanies(ride.companyIds),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: ride.companyIds.map((id) => CompanyChip(
+                    companyName: companies[id] ?? 'Unknown',
+                    color: isFull ? Colors.orange : Colors.purple[800]!,
+                  )).toList(),
+                ),
                 const SizedBox(height: 12),
               ],
               ClipRRect(
