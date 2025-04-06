@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../models/message.dart';
 import '../../models/ride.dart';
 import '../../services/auth_service.dart';
@@ -38,6 +39,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = true;
   bool _isSending = false;
   bool _isRideActive = true;
+  bool _isRideFull = false;
   Timer? _typingTimer;
   final Map<String, String> _participantEmails = {};
   final Map<String, String> _participantNames = {};
@@ -72,7 +74,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _webSocketService.typingUsers.addListener(_handleTypingUsersChange);
     _webSocketService.participantsCount.addListener(_updateParticipantsCount);
     
-    // Listen for connection errors
     _webSocketService.connectionError.addListener(() {
       if (_webSocketService.connectionError.value != null && mounted) {
         _showErrorSnackbar(_webSocketService.connectionError.value!);
@@ -85,7 +86,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _webSocketService = ws.WebSocketService(
         rideId: widget.rideId,
         token: _authService.token!,
-        baseUrl: 'wss://transport-share-backend.onrender.com', // Replace with your actual WebSocket URL
+        baseUrl: 'wss://transport-share-backend.onrender.com',
       );
 
       await Future.wait([
@@ -171,13 +172,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           _isRideActive = ride.status == RideStatus.active;
+          _isRideFull = ride.seatsAvailable <= 0;
         });
       }
     } catch (e, stackTrace) {
       debugPrint('Error checking ride status: $e\n$stackTrace');
-      if (mounted) {
-        setState(() => _isRideActive = false);
-      }
     }
   }
 
@@ -208,7 +207,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty || _isSending || !_isRideActive) return;
+    if (text.isEmpty || _isSending) return;
 
     setState(() => _isSending = true);
 
@@ -250,13 +249,7 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: Colors.red[800],
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        action: SnackBarAction(
-          label: 'Retry',
-          textColor: Colors.white,
-          onPressed: _reconnect,
-        ),
-      ),
-    );
+    ));
   }
 
   void _showSuccessSnackbar(String message) {
@@ -314,7 +307,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             if (widget.rideDetails != null)
               Text(
-                '${widget.rideDetails!.fromAddress} → ${widget.rideDetails!.toAddress}',
+                '${widget.rideDetails!.fromAddress.split(',').first} → ${widget.rideDetails!.toAddress.split(',').first}',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 12,
@@ -370,31 +363,51 @@ class _ChatScreenState extends State<ChatScreen> {
                 message: _webSocketService.connectionError.value!,
                 onRetry: _reconnect,
               ),
-            if (!_isRideActive)
-              _buildRideEndedBanner(),
+            if (!_isRideActive || _isRideFull)
+              _buildStatusBanner(),
             if (_webSocketService.typingUsers.value.isNotEmpty)
               _buildTypingIndicator(),
             Expanded(
               child: _buildMessageList(),
             ),
-            if (_isRideActive) _buildMessageInput(),
+            _buildMessageInput(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRideEndedBanner() {
+  Widget _buildStatusBanner() {
+    String message;
+    Color color;
+    
+    if (!_isRideActive) {
+      message = 'This ride is full or ended - chat remains open';
+      color = Colors.orange;
+    } else if (_isRideFull) {
+      message = 'This ride is full - you can still chat';
+      color = Colors.purple;
+    } else {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      color: Colors.orange,
+      color: color.withOpacity(0.2),
       child: Center(
-        child: Text(
-          'This ride has ended',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.info_outline, size: 16, color: color),
+            const SizedBox(width: 8),
+            Text(
+              message,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -437,7 +450,6 @@ class _ChatScreenState extends State<ChatScreen> {
       itemCount: _messages.length,
       itemBuilder: (context, index) {
         final message = _messages[index];
-
         return MessageBubble(
           key: ValueKey(message.id),
           message: message,
@@ -449,53 +461,77 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageInput() {
+    final bool isDisabled = false;
+    
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: GlassCard(
-        color: Colors.black,
+        color: Colors.black.withOpacity(isDisabled ? 0.5 : 0.7),
+        //borderColor: isDisabled ? Colors.grey : null,
         child: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Row(
+          child: Column(
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _messageController,
-                  focusNode: _messageFocusNode,
-                  enabled: !_isSending,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Type your message...',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[900],
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+              if (isDisabled)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    _isRideFull ? 'Ride is full' : 'Ride has ended',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 12,
                     ),
                   ),
-                  onChanged: (_) => _handleTyping(),
-                  onSubmitted: (_) => _sendMessage(),
-                  maxLines: 3,
-                  minLines: 1,
                 ),
-              ),
-              const SizedBox(width: 8),
-              _isSending
-                  ? const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: CircularProgressIndicator(
-                        color: Colors.purple,
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      focusNode: _messageFocusNode,
+                      enabled: !_isSending,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(isDisabled ? 0.7 : 1.0),
                       ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: _sendMessage,
-                      color: Colors.purple,
+                      decoration: InputDecoration(
+                        hintText: 'Type your message...',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withOpacity(isDisabled ? 0.4 : 0.6),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[900]!.withOpacity(isDisabled ? 0.5 : 0.8),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      onChanged: (_) => _handleTyping(),
+                      onSubmitted: (_) => _sendMessage(),
+                      maxLines: 3,
+                      minLines: 1,
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  _isSending
+                      ? const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: CircularProgressIndicator(
+                            color: Colors.purple,
+                          ),
+                        )
+                      : IconButton(
+                          icon: Icon(Icons.send,
+                              color: isDisabled 
+                                ? Colors.grey 
+                                : Colors.purple),
+                          onPressed: isDisabled ? null : _sendMessage,
+                        ),
+                ],
+              ),
             ],
           ),
         ),
