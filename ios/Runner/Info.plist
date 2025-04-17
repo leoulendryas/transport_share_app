@@ -49,5 +49,24 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Add inside <dict> -->
+	<key>CFBundleURLTypes</key>
+	<array>
+	    <dict>
+	        <key>CFBundleTypeRole</key>
+	        <string>Editor</string>
+	        <key>CFBundleURLName</key>
+	        <string>com.yourcompany.transportshare</string>
+	        <key>CFBundleURLSchemes</key>
+	        <array>
+	            <string>transportshare</string>
+	        </array>
+	    </dict>
+	</array>
+	
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+	    <string>applinks:transport-share-backend.onrender.com</string>
+	</array>
 </dict>
 </plist>
