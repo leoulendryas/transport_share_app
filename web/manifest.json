@@ -1,12 +1,13 @@
 {
-    "name": "transport_share_app",
-    "short_name": "transport_share_app",
-    "start_url": ".",
+    "name": "Met Share - Rides & Transport",
+    "short_name": "Met Share",
+    "start_url": "/?source=pwa",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#000000",
+    "theme_color": "#4A148C",
+    "description": "Share rides and transportation with your community",
     "orientation": "portrait-primary",
+    "scope": "/",
     "prefer_related_applications": false,
     "icons": [
         {
@@ -30,6 +31,14 @@
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "screenshots/screenshot1.png",
+            "sizes": "1080x1920",
+            "type": "image/png",
+            "label": "Main Screen"
         }
     ]
 }
