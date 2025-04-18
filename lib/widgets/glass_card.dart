@@ -15,7 +15,7 @@ class GlassCard extends StatelessWidget {
     this.width,
     this.height,
     this.color,
-    this.opacity = 0.85,
+    this.opacity = 1,
     this.borderRadius = 16.0,
   });
 
@@ -36,11 +36,11 @@ class GlassCard extends StatelessWidget {
         ),
         border: Border.all(
           width: 1.0,
-          color: Colors.purple.withOpacity(0.2),
+          color: Color(0xFF004F2D).withOpacity(0.2),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.purple.withOpacity(0.1),
+            color: Color(0xFF004F2D).withOpacity(0.1),
             blurRadius: 20.0,
             spreadRadius: 2.0,
           ),
