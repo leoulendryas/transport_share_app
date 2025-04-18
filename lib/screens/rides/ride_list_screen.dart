@@ -221,7 +221,7 @@ class _RideListScreenState extends State<RideListScreen> {
 
   Widget _buildSearchHeader() {
     return GlassCard(
-      color: Colors.black,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -240,14 +240,14 @@ class _RideListScreenState extends State<RideListScreen> {
               controller: _fromController,
               suggestionsCallback: _getLocationSuggestions,
               itemBuilder: (_, location) => Container(
-                color: Colors.black, // 👈 dark background for suggestion item
+                color: Colors.white, // 👈 dark background for suggestion item
                 child: ListTile(
-                  leading: const Icon(Icons.location_on, color: Colors.purple),
+                  leading: const Icon(Icons.location_on, color: Color(0xFF004F2D)),
                   title: Text(
                     location.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Colors.black),
                   ),
                 ),
               ),
@@ -264,8 +264,8 @@ class _RideListScreenState extends State<RideListScreen> {
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Pickup Location',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  prefixIcon: const Icon(Icons.location_on, color: Colors.purple),
+                  labelStyle: TextStyle(color: Colors.black),
+                  prefixIcon: const Icon(Icons.location_on, color: Color(0xFF004F2D)),
                   suffixIcon: _fromController.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.6)),
@@ -278,18 +278,18 @@ class _RideListScreenState extends State<RideListScreen> {
                         )
                       : null,
                   filled: true,
-                  fillColor: Colors.black.withOpacity(0.4),
+                  fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
+                    borderSide: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.purple),
+                    borderSide: const BorderSide(color: Color(0xFF004F2D)),
                   ),
                 ),
                 validator: (value) => value!.isEmpty ? 'Required' : null,
@@ -300,14 +300,14 @@ class _RideListScreenState extends State<RideListScreen> {
               controller: _toController,
               suggestionsCallback: _getLocationSuggestions,
               itemBuilder: (_, location) => Container(
-                color: Colors.black, // 👈 dark suggestion item background
+                color: Colors.white, // 👈 dark suggestion item background
                 child: ListTile(
-                  leading: const Icon(Icons.flag, color: Colors.purple),
+                  leading: const Icon(Icons.flag, color: Color(0xFF004F2D)),
                   title: Text(
                     location.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Colors.black),
                   ),
                 ),
               ),
@@ -324,8 +324,8 @@ class _RideListScreenState extends State<RideListScreen> {
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Destination',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  prefixIcon: const Icon(Icons.flag, color: Colors.purple),
+                  labelStyle: TextStyle(color: Colors.black),
+                  prefixIcon: const Icon(Icons.flag, color: Color(0xFF004F2D)),
                   suffixIcon: _toController.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.6)),
@@ -338,18 +338,18 @@ class _RideListScreenState extends State<RideListScreen> {
                         )
                       : null,
                   filled: true,
-                  fillColor: Colors.black.withOpacity(0.4),
+                  fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
+                    borderSide: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.purple),
+                    borderSide: const BorderSide(color: Color(0xFF004F2D)),
                   ),
                 ),
                 validator: (value) => value!.isEmpty ? 'Required' : null,
@@ -364,7 +364,7 @@ class _RideListScreenState extends State<RideListScreen> {
                     label: const Text('Find Rides', style: TextStyle(color: Colors.white)),
                     onPressed: _isLoading ? null : _search,
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.purple[800],
+                      backgroundColor: Color(0xFF004F2D),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -374,12 +374,12 @@ class _RideListScreenState extends State<RideListScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.my_location, color: Colors.purple),
+                  icon: const Icon(Icons.my_location, color: Color(0xFF004F2D)),
                   onPressed: () {
                     // TODO: Implement current location logic
                   },
                   style: IconButton.styleFrom(
-                    backgroundColor: Colors.black.withOpacity(0.4),
+                    backgroundColor: Colors.white,
                     padding: const EdgeInsets.all(16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -402,7 +402,7 @@ class _RideListScreenState extends State<RideListScreen> {
           Icon(
             Icons.directions_car_filled,
             size: 80,
-            color: Colors.purple.withOpacity(0.3),
+            color: Color(0xFF004F2D).withOpacity(0.9),
           ),
           const SizedBox(height: 20),
           Text(
@@ -411,7 +411,7 @@ class _RideListScreenState extends State<RideListScreen> {
                 : 'No rides found for this route',
             style: const TextStyle(
               fontSize: 20,
-              color: Colors.white,
+              color: Colors.black,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -432,7 +432,7 @@ class _RideListScreenState extends State<RideListScreen> {
             label: const Text('Create Shared Meter Taxi', style: TextStyle(color: Colors.white)),
             onPressed: _navigateToCreateRide,
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.purple[800],
+              backgroundColor: Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -467,16 +467,16 @@ class _RideListScreenState extends State<RideListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Color(0xFFF7F9F9),
       extendBodyBehindAppBar: false,
       appBar: AppBar(
-        title: const Text('Meter Taxi Share', style: TextStyle(color: Colors.white)),
+        title: const Text('Met Share', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         centerTitle: true,
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.purple),
+        backgroundColor: Color(0xFFF7F9F9),
+        iconTheme: const IconThemeData(color: Color(0xFF004F2D)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person, color: Colors.purple),
+            icon: const Icon(Icons.person, color: Color(0xFF004F2D)),
             tooltip: 'My Rides',
             onPressed: () => Navigator.push(
               context,
@@ -484,7 +484,7 @@ class _RideListScreenState extends State<RideListScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.add, color: Colors.purple),
+            icon: const Icon(Icons.add, color: Color(0xFF004F2D)),
             onPressed: _navigateToCreateRide,
             tooltip: 'Create Ride',
           ),
@@ -496,14 +496,14 @@ class _RideListScreenState extends State<RideListScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.black,
-              Colors.purple[900]!,
+              Color(0xFFF7F9F9),
+              Color(0xFFF7F9F9)!,
             ],
           ),
         ),
         child: LiquidPullToRefresh(
           onRefresh: _fetchRides,
-          color: Colors.purple[800],
+          color: Color(0xFF004F2D),
           backgroundColor: Colors.black,
           height: 120,
           animSpeedFactor: 2,
@@ -564,17 +564,6 @@ class _RideListScreenState extends State<RideListScreen> {
             ],
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToCreateRide,
-        tooltip: 'Create Shared Ride',
-        backgroundColor: Colors.purple[800],
-        foregroundColor: Colors.white,
-        elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: const Icon(Icons.add),
       ),
     );
   }
