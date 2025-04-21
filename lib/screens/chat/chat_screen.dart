@@ -258,7 +258,7 @@ class _ChatScreenState extends State<ChatScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.purple[800],
+        backgroundColor: Color(0xFF004F2D),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ));
@@ -286,7 +286,7 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: Colors.black,
         body: Center(
           child: CircularProgressIndicator(
-            color: Colors.purple,
+            color: Color(0xFF004F2D),
           ),
         ),
       );
@@ -347,13 +347,9 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.black,
-              Colors.purple[900]!,
-            ],
+          image: DecorationImage(
+            image: AssetImage('icon/chat_bg.png'), // <-- adjust this path
+            fit: BoxFit.cover, // or BoxFit.repeat for seamless pattern
           ),
         ),
         child: Column(
@@ -386,7 +382,7 @@ class _ChatScreenState extends State<ChatScreen> {
       color = Colors.orange;
     } else if (_isRideFull) {
       message = 'This ride is full - you can still chat';
-      color = Colors.purple;
+      color = Color(0xFF004F2D);
     } else {
       return const SizedBox.shrink();
     }
@@ -466,7 +462,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: GlassCard(
-        color: Colors.black.withOpacity(isDisabled ? 0.5 : 0.7),
+        color: Colors.white.withOpacity(isDisabled ? 0.5 : 0.7),
         //borderColor: isDisabled ? Colors.grey : null,
         child: Padding(
           padding: const EdgeInsets.all(8.0),
@@ -520,14 +516,14 @@ class _ChatScreenState extends State<ChatScreen> {
                       ? const Padding(
                           padding: EdgeInsets.all(8.0),
                           child: CircularProgressIndicator(
-                            color: Colors.purple,
+                            color: Color(0xFF004F2D),
                           ),
                         )
                       : IconButton(
                           icon: Icon(Icons.send,
                               color: isDisabled 
                                 ? Colors.grey 
-                                : Colors.purple),
+                                : Color(0xFF004F2D)),
                           onPressed: isDisabled ? null : _sendMessage,
                         ),
                 ],
@@ -593,13 +589,13 @@ class _ChatScreenState extends State<ChatScreen> {
               onPressed: () => Navigator.pop(context),
               child: const Text(
                 'Close',
-                style: TextStyle(color: Colors.purple),
+                style: TextStyle(color: Color(0xFF004F2D)),
               ),
             ),
           ],
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.purple.withOpacity(0.3)),
+            side: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)),
           ),
         ),
       );
@@ -614,7 +610,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildParticipantTile(String name, String email, bool isDriver) {
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: Colors.purple[800],
+        backgroundColor: Color(0xFF004F2D),
         child: Text(
           name.isNotEmpty ? name[0].toUpperCase() : '?',
           style: const TextStyle(color: Colors.white),
