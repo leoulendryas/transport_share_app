@@ -54,14 +54,14 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
 
   Future<void> _initializeAndLoad() async {
     if (!mounted) return;
-    
+
     try {
       if (!_authService.isInitialized) {
         await _authService.init();
       }
 
       if (!mounted) return;
-      
+
       if (_authService.isAuthenticated) {
         await _loadRides();
       } else {
@@ -81,7 +81,7 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
 
   Future<void> _loadRides() async {
     if (!mounted) return;
-    
+
     setState(() {
       _isLoading = true;
       _hasError = false;
@@ -135,32 +135,23 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFFF7F9F9),
       appBar: AppBar(
-        title: const Text('My Active Rides', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'My Active Rides',
+          style: TextStyle(color: Colors.black),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(Icons.refresh, color: Colors.black),
             onPressed: _refreshRides,
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.black,
-              Color(0xFF4A148C), // Using direct color code for purple[900]
-            ],
-          ),
-        ),
-        child: _buildBody(),
-      ),
+      body: _buildBody(),
     );
   }
 
@@ -183,17 +174,17 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.directions_car, size: 48, color: Colors.purple),
+            const Icon(Icons.directions_car, size: 48, color: Color(0xFF004F2D)),
             const SizedBox(height: 16),
             const Text(
               'No active rides found',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: Colors.black),
             ),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _refreshRides,
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.purple,
+                backgroundColor: Colors.black,
                 foregroundColor: Colors.white,
               ),
               child: const Text('Refresh'),
@@ -204,6 +195,7 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
     }
 
     return RefreshIndicator(
+      color: const Color(0xFF004F2D),
       onRefresh: () async => _refreshRides(),
       child: ListView.builder(
         itemCount: _rides.length + (_hasMoreItems() ? 1 : 0),
@@ -229,11 +221,11 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
       padding: const EdgeInsets.all(16.0),
       child: Center(
         child: _isLoading
-            ? const CircularProgressIndicator(color: Colors.purple)
+            ? const CircularProgressIndicator(color: Color(0xFF004F2D))
             : FilledButton(
                 onPressed: _loadNextPage,
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.purple,
+                  backgroundColor: Colors.black,
                   foregroundColor: Colors.white,
                 ),
                 child: const Text('Load More'),
