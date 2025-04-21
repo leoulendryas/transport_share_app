@@ -75,7 +75,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         );
 
         final response = await http.get(uri, headers: {
-            'User-Agent': 'MetShare/1.0 (leoulendryas@gmail.com)', // update with real app/email
+            'User-Agent': 'MetShare/1.0 (leoulendryas@gmail.com)',
         });
 
         if (response.statusCode == 200) {
@@ -182,7 +182,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         content: Text(message),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF004F2D), // Changed to green
         action: SnackBarAction(
           label: 'OK',
           textColor: Colors.white,
@@ -199,7 +199,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         content: Text(message),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: Colors.purple[800],
+        backgroundColor: Color(0xFF004F2D), // Changed to green
         action: SnackBarAction(
           label: 'OK',
           textColor: Colors.white,
@@ -220,7 +220,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
       builder: (context, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: ColorScheme.dark(
-            primary: Colors.purple,
+            primary: Color(0xFF004F2D), // Changed to green
             onPrimary: Colors.white,
             surface: Colors.black,
             onSurface: Colors.white,
@@ -239,7 +239,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
       builder: (context, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: ColorScheme.dark(
-            primary: Colors.purple,
+            primary: Color(0xFF004F2D), // Changed to green
             onPrimary: Colors.white,
             surface: Colors.black,
             onSurface: Colors.white,
@@ -302,7 +302,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                       ),
                       secondary: Icon(
                         company['icon'] as IconData,
-                        color: Colors.purple,
+                        color: Color(0xFF004F2D), // Changed to green
                       ),
                       value: _selectedCompanies.contains(company['id'] as int),
                       onChanged: (value) => setState(() {
@@ -312,7 +312,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                           _selectedCompanies.remove(company['id']);
                         }
                       }),
-                      activeColor: Colors.purple,
+                      activeColor: Color(0xFF004F2D), // Changed to green
                       checkColor: Colors.white,
                     )).toList(),
                   ),
@@ -320,7 +320,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                 const SizedBox(height: 16),
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.purple[800],
+                    backgroundColor: Color(0xFF004F2D), // Changed to green
                     foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 50),
                   ),
@@ -359,7 +359,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
       spacing: 8,
       children: _selectedCompanies.map((id) => SexyChip(
         label: companies[id] ?? 'Company $id',
-        color: Colors.purple[800]!,
+        color: Color(0xFF004F2D), // Changed to green
         icon: Icons.directions_car,
       )).toList(),
     );
@@ -367,7 +367,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
 
   Widget _buildRouteSection() {
     return GlassCard(
-      color: Colors.black,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -378,7 +378,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: Colors.black,
               ),
             ),
             const SizedBox(height: 16),
@@ -387,14 +387,14 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               suggestionsCallback: _getLocationSuggestions,
               itemBuilder: (context, location) {
                 return Container(
-                  color: Colors.black, // 👈 set background for each item
+                  color: Colors.white,
                   child: ListTile(
-                    leading: Icon(Icons.location_on, color: Colors.purple),
+                    leading: Icon(Icons.location_on, color: Color(0xFF004F2D)), // Green
                     title: Text(
                       location.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: Colors.black),
                     ),
                   ),
                 );
@@ -412,11 +412,11 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                 return TextFormField(
                   controller: controller,
                   focusNode: focusNode,
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: Colors.black),
                   decoration: InputDecoration(
                     labelText: 'Pickup Location',
-                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                    prefixIcon: Icon(Icons.location_on, color: Colors.purple),
+                    labelStyle: TextStyle(color: Colors.black),
+                    prefixIcon: Icon(Icons.location_on, color: Color(0xFF004F2D)), // Green
                     suffixIcon: _fromController.text.isNotEmpty
                         ? IconButton(
                             icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.6)),
@@ -429,18 +429,18 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                           )
                         : null,
                     filled: true,
-                    fillColor: Colors.black.withOpacity(0.4),
+                    fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
+                      borderSide: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)), // Green
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.purple),
+                      borderSide: BorderSide(color: Color(0xFF004F2D)), // Green
                     ),
                   ),
                   validator: (value) => value!.isEmpty ? 'Required' : null,
@@ -452,14 +452,14 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               controller: _toController,
               suggestionsCallback: _getLocationSuggestions,
               itemBuilder: (_, location) => Container(
-                color: Colors.black, // 👈 Background color for each suggestion item
+                color: Colors.white,
                 child: ListTile(
-                  leading: Icon(Icons.flag, color: Colors.purple),
+                  leading: Icon(Icons.flag, color: Color(0xFF004F2D)), // Green
                   title: Text(
                     location.displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: Colors.black),
                   ),
                 ),
               ),
@@ -475,11 +475,11 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               builder: (context, controller, focusNode) => TextFormField(
                 controller: controller,
                 focusNode: focusNode,
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: Colors.black),
                 decoration: InputDecoration(
                   labelText: 'Destination',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  prefixIcon: Icon(Icons.flag, color: Colors.purple),
+                  labelStyle: TextStyle(color: Colors.black),
+                  prefixIcon: Icon(Icons.flag, color: Color(0xFF004F2D)), // Green
                   suffixIcon: _toController.text.isNotEmpty
                       ? IconButton(
                           icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.6)),
@@ -492,18 +492,18 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                         )
                       : null,
                   filled: true,
-                  fillColor: Colors.black.withOpacity(0.4),
+                  fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
+                    borderSide: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)), // Green
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.purple),
+                    borderSide: BorderSide(color: Color(0xFF004F2D)), // Green
                   ),
                 ),
                 validator: (value) => value!.isEmpty ? 'Required' : null,
@@ -521,7 +521,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         : (int.tryParse(_seatsController.text) ?? 0) + 1;
 
     return GlassCard(
-      color: Colors.black,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -532,34 +532,34 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: Colors.black,
               ),
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _seatsController,
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: Colors.black),
               decoration: InputDecoration(
                 labelText: 'People to share with',
-                labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                prefixIcon: Icon(Icons.people, color: Colors.purple),
+                labelStyle: TextStyle(color: Colors.black),
+                prefixIcon: Icon(Icons.people, color: Color(0xFF004F2D)),
                 helperText: 'How many people you want to share with (1-3)',
-                helperStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                helperStyle: TextStyle(color: Colors.grey),
                 suffixText: 'Total: $totalPeople people',
-                suffixStyle: TextStyle(color: Colors.white),
+                suffixStyle: TextStyle(color: Colors.black),
                 filled: true,
-                fillColor: Colors.black.withOpacity(0.4),
+                fillColor: Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.purple.withOpacity(0.3)),
+                  borderSide: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.purple),
+                  borderSide: BorderSide(color: Color(0xFF004F2D)),
                 ),
               ),
               keyboardType: TextInputType.number,
@@ -576,33 +576,26 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.purple.withOpacity(0.1),
+                color: Color(0xFF004F2D).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.purple.withOpacity(0.3),
-                ),
+                border: Border.all(color: Color(0xFF004F2D).withOpacity(0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Ride Composition',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                    ),
-                  ),
+                  Text('Ride Composition', style: TextStyle(color: Colors.black54)),
                   const SizedBox(height: 8),
                   Text(
                     '• You (Owner)\n'
                     '• ${_seatsController.text.isEmpty ? '?' : _seatsController.text} ${_seatsController.text == '1' ? 'person' : 'people'} sharing',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: Colors.black),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Total: $totalPeople ${totalPeople == 1 ? 'person' : 'people'} in vehicle',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.purple,
+                      color: Color(0xFF004F2D),
                     ),
                   ),
                 ],
@@ -616,7 +609,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
 
   Widget _buildOptionsSection() {
     return GlassCard(
-      color: Colors.black,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -627,7 +620,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: Colors.black,
               ),
             ),
             const SizedBox(height: 16),
@@ -637,45 +630,35 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.4),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Color(0xFF004F2D).withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.access_time,
-                      color: Colors.purple,
-                    ),
+                    Icon(Icons.access_time, color: Color(0xFF004F2D)),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Departure Time',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                            ),
-                          ),
+                          Text('Departure Time', style: TextStyle(color: Colors.black54)),
                           const SizedBox(height: 4),
                           Text(
                             _selectedTime == null
                                 ? 'Not specified'
                                 : DateFormat('EEE, MMM d • h:mm a').format(_selectedTime!),
-                            style: TextStyle(color: Colors.white),
+                            style: TextStyle(color: Colors.black),
                           ),
                           if (_selectedTime != null && _selectedTime!.isBefore(DateTime.now()))
                             Text(
                               'Please select a future time',
-                              style: TextStyle(
-                                color: Colors.red[400],
-                                fontSize: 12,
-                              ),
+                              style: TextStyle(color: Colors.red[400], fontSize: 12),
                             ),
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white),
+                    Icon(Icons.arrow_forward_ios, size: 16, color: Colors.black),
                   ],
                 ),
               ),
@@ -687,32 +670,25 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.4),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Color(0xFF004F2D).withOpacity(0.3)),
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.directions_car,
-                      color: Colors.purple,
-                    ),
+                    Icon(Icons.directions_car, color: Color(0xFF004F2D)),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Meter-Taxi Companies',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                            ),
-                          ),
+                          Text('Meter-Taxi Companies', style: TextStyle(color: Colors.black54)),
                           const SizedBox(height: 4),
                           _buildSelectedCompanies(),
                         ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white),
+                    Icon(Icons.arrow_forward_ios, size: 16, color: Colors.black),
                   ],
                 ),
               ),
@@ -726,24 +702,24 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Color(0xFFF7F9F9),
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Create Shared Meter Taxi', style: TextStyle(color: Colors.white)),
+        title: const Text('Create Shared Meter Taxi', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: Color(0xFFF7F9F9),
         scrolledUnderElevation: 4,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Color(0xFF004F2D)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.info_outline, color: Colors.white),
+            icon: const Icon(Icons.info_outline, color: Color(0xFF004F2D)),
             onPressed: () {
               showModalBottomSheet(
                 context: context,
-                backgroundColor: Colors.transparent,
                 builder: (context) => GlassCard(
                   color: Colors.black,
-                  opacity: 0.9,
+                  opacity: 1,
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -769,7 +745,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                         const SizedBox(height: 24),
                         FilledButton(
                           style: FilledButton.styleFrom(
-                            backgroundColor: Colors.purple[800],
+                            backgroundColor: Color(0xFF004F2D), // Green
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 50),
                           ),
@@ -791,8 +767,8 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.black,
-              Colors.purple[900]!,
+              Color(0xFFF7F9F9),
+              Color(0xFFF7F9F9).withOpacity(0.8), // Green tint
             ],
           ),
         ),
@@ -811,13 +787,13 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                 FilledButton(
                   onPressed: _isSubmitting ? null : _submit,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.purple[800],
+                    backgroundColor: Color(0xFF004F2D), // Green
                     foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 56),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    disabledBackgroundColor: Colors.purple[800]!.withOpacity(0.5),
+                    disabledBackgroundColor: Color(0xFF004F2D).withOpacity(0.5),
                   ),
                   child: _isSubmitting
                       ? const SizedBox(
