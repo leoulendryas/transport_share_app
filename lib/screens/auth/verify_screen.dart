@@ -1,4 +1,3 @@
-// lib/screens/auth/verify_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
@@ -6,7 +5,7 @@ import '../../../services/auth_service.dart';
 class VerifyScreen extends StatefulWidget {
   final String? email;
   final String? phone;
-  
+
   const VerifyScreen({super.key, this.email, this.phone});
 
   @override
@@ -25,21 +24,15 @@ class _VerifyScreenState extends State<VerifyScreen> {
   }
 
   Future<void> _verify() async {
-    if (_isEmailVerification) return;
-    if (_otpController.text.isEmpty) return;
+    if (_isEmailVerification || _otpController.text.isEmpty) return;
 
     setState(() => _isLoading = true);
-    
     try {
-      if (_isEmailVerification) {
-        // Handle email verification via deep link
-      } else {
-        await Provider.of<AuthService>(context, listen: false).login(
-          phone: widget.phone,
-          otp: _otpController.text,
-        );
-        if (mounted) Navigator.pushReplacementNamed(context, '/rides');
-      }
+      await Provider.of<AuthService>(context, listen: false).login(
+        phone: widget.phone,
+        otp: _otpController.text,
+      );
+      if (mounted) Navigator.pushReplacementNamed(context, '/rides');
     } catch (e) {
       _showError(e.toString());
     } finally {
@@ -50,7 +43,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
   Future<void> _resendVerification() async {
     try {
       if (_isEmailVerification) {
-        // Implement email resend
+        // Email resend logic here
       } else {
         await Provider.of<AuthService>(context, listen: false)
             .requestOtp(widget.phone!);
@@ -74,7 +67,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.green,
+        backgroundColor: const Color(0xFF004F2D),
       ),
     );
   }
@@ -82,42 +75,78 @@ class _VerifyScreenState extends State<VerifyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Verify Account')),
+      backgroundColor: const Color(0xFFF7F9F9), // white background
+      appBar: AppBar(
+        title: const Text('Verify Account'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               _isEmailVerification
-                  ? 'Check your email ${widget.email} for verification link'
-                  : 'Enter OTP sent to ${widget.phone}',
-              style: Theme.of(context).textTheme.titleMedium,
+                  ? 'Check your email ${widget.email} for a verification link.'
+                  : 'Enter the OTP sent to ${widget.phone}',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Colors.black87,
+                  ),
             ),
             if (!_isEmailVerification) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 30),
               TextField(
                 controller: _otpController,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'OTP Code',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
                 ),
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _verify,
-                child: _isLoading 
-                    ? const CircularProgressIndicator()
-                    : const Text('Verify Phone'),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: _isLoading ? null : _verify,
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Verify Phone'),
+                ),
               ),
             ],
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: _resendVerification,
-              child: Text(
-                _isEmailVerification 
-                    ? 'Resend Verification Email'
-                    : 'Resend OTP',
+            const SizedBox(height: 30),
+            Center(
+              child: TextButton(
+                onPressed: _resendVerification,
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF004F2D),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                child: Text(
+                  _isEmailVerification
+                      ? 'Resend Verification Email'
+                      : 'Resend OTP',
+                ),
               ),
             ),
           ],
