@@ -183,7 +183,7 @@ class _RideListScreenState extends State<RideListScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Please select both locations'),
-          backgroundColor: Colors.purple[800],
+          backgroundColor: Color(0xFF004F2D),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
@@ -232,7 +232,7 @@ class _RideListScreenState extends State<RideListScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: Colors.black,
               ),
             ),
             const SizedBox(height: 16),
@@ -261,7 +261,7 @@ class _RideListScreenState extends State<RideListScreen> {
               builder: (context, controller, focusNode) => TextFormField(
                 controller: controller,
                 focusNode: focusNode,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: Colors.black),
                 decoration: InputDecoration(
                   labelText: 'Pickup Location',
                   labelStyle: TextStyle(color: Colors.black),
@@ -321,7 +321,7 @@ class _RideListScreenState extends State<RideListScreen> {
               builder: (context, controller, focusNode) => TextFormField(
                 controller: controller,
                 focusNode: focusNode,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: Colors.black),
                 decoration: InputDecoration(
                   labelText: 'Destination',
                   labelStyle: TextStyle(color: Colors.black),
