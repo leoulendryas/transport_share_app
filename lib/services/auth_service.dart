@@ -291,7 +291,7 @@ class AuthService extends ChangeNotifier {
 
       await ensureInitialized();
 
-      final futures = <Future>[
+      await Future.wait([
         _prefs!.setString(_tokenKey, _token!),
         _prefs!.setString(_userIdKey, _userId!),
         if (_email != null) _prefs!.setString(_emailKey, _email!),
@@ -300,9 +300,8 @@ class AuthService extends ChangeNotifier {
         _prefs!.setString(_lastNameKey, _lastName!),
         _prefs!.setString(_tokenExpiryKey, _tokenExpiry!.toIso8601String()),
         if (_refreshToken != null) _prefs!.setString(_refreshTokenKey, _refreshToken!),
-      ];
+      ]);
 
-      await Future.wait(futures.whereType<Future>());
       notifyListeners();
     } catch (e) {
       await _clearAuthData();
@@ -337,13 +336,19 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Map<String, String>> getAuthHeaders() async {
+  Future<String?> getToken() async {
     await ensureInitialized();
-    if (!isAuthenticated && _refreshToken != null) {
+    if (_isTokenExpired && _refreshToken != null) {
       await refreshAuthToken();
     }
+    return _token;
+  }
+
+  Future<Map<String, String>> getAuthHeaders() async {
+    await ensureInitialized();
+    final currentToken = await getToken();
     return {
-      if (isAuthenticated) 'Authorization': 'Bearer $_token',
+      if (currentToken != null) 'Authorization': 'Bearer $currentToken',
       'Content-Type': 'application/json',
     };
   }
