@@ -142,7 +142,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
         content: Text(message),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF004F2D),
         action: SnackBarAction(
           label: 'OK',
           textColor: Colors.white,
@@ -158,7 +158,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
         content: Text(message),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: Colors.purple[800],
+        backgroundColor: Color(0xFF004F2D),
         action: SnackBarAction(
           label: 'OK',
           textColor: Colors.white,
@@ -198,7 +198,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
       children: companyIds.map((id) {
         return SexyChip(
           label: companies[id] ?? 'Company $id',
-          color: Colors.purple[800]!,
+          color: Color(0xFF004F2D),
           icon: Icons.directions_car_filled,
         );
       }).toList(),
@@ -207,7 +207,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
 
   Widget _buildDetailCard(IconData icon, String title, String value, {String? description}) {
     return GlassCard(
-      color: Colors.black,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -218,13 +218,13 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
+                    color: Color(0xFF004F2D).withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     icon,
                     size: 24,
-                    color: Colors.purple,
+                    color: Color(0xFF004F2D),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -232,7 +232,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                   child: Text(
                     title,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
+                      color: Colors.black.withOpacity(0.6),
                     ),
                   ),
                 ),
@@ -244,7 +244,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Colors.white,
+                color: Colors.black,
               ),
             ),
             if (description != null) ...[
@@ -252,7 +252,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
               Text(
                 description,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.6),
+                  color: Colors.black.withOpacity(0.6),
                 ),
               ),
             ],
@@ -267,7 +267,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
     final percentage = filledSeats / _ride.totalSeats;
 
     return GlassCard(
-      color: Colors.black,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -278,13 +278,13 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
+                    color: Color(0xFF004F2D).withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     Icons.people_outline,
                     size: 24,
-                    color: Colors.purple,
+                    color: Color(0xFF004F2D),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -292,7 +292,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                   child: Text(
                     'Ride Sharing',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
+                      color: Colors.black.withOpacity(0.6),
                     ),
                   ),
                 ),
@@ -306,14 +306,14 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: Colors.black,
                   ),
                 ),
                 const Spacer(),
                 Text(
                   '${_ride.seatsAvailable} available',
                   style: TextStyle(
-                    color: Colors.purple,
+                    color: Color(0xFF004F2D),
                   ),
                 ),
               ],
@@ -324,9 +324,9 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
               child: LinearProgressIndicator(
                 value: percentage,
                 minHeight: 10,
-                backgroundColor: Colors.black.withOpacity(0.4),
+                backgroundColor: Colors.grey[300],
                 color: _ride.seatsAvailable > 0
-                    ? Colors.purple
+                    ? Color(0xFF004F2D)
                     : Colors.red,
               ),
             ),
@@ -334,7 +334,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
             if (_ride.seatsAvailable > 0)
               Text(
                 'Join ${_ride.seatsAvailable} other${_ride.seatsAvailable > 1 ? 's' : ''} in this ride',
-                style: TextStyle(color: Colors.white.withOpacity(0.8)),
+                style: TextStyle(color: Colors.black.withOpacity(0.8)),
               )
             else
               Text(
@@ -353,7 +353,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
     if (_isLoading) {
       return [
         const Center(
-          child: CircularProgressIndicator(color: Colors.purple),
+          child: CircularProgressIndicator(color: Color(0xFF004F2D)),
         ),
       ];
     }
@@ -368,7 +368,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
           icon: const Icon(Icons.chat_bubble_outline),
           label: const Text('Group Chat'),
           style: FilledButton.styleFrom(
-            backgroundColor: Colors.purple[800],
+            backgroundColor: Color(0xFF004F2D),
             foregroundColor: Colors.white,
             minimumSize: const Size(double.infinity, 50),
             shape: RoundedRectangleBorder(
@@ -425,9 +425,9 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
           icon: const Icon(Icons.directions_car),
           label: const Text('Join Ride'),
           style: FilledButton.styleFrom(
-            backgroundColor: Colors.purple[800],
+            backgroundColor: Color(0xFF004F2D),
             foregroundColor: Colors.white,
-            disabledBackgroundColor: Colors.purple[800]!.withOpacity(0.5),
+            disabledBackgroundColor: Color(0xFF004F2D).withOpacity(0.5),
             minimumSize: const Size(double.infinity, 50),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -444,20 +444,20 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Colors.black,
-        title: const Text('Cancel Ride?', style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: Colors.white,
+        title: Text('Cancel Ride?', style: TextStyle(color: Colors.black)),
+        content: Text(
           'This will notify all participants and cancel the ride. This action cannot be undone.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: Colors.black87),
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.purple.withOpacity(0.3)),
+          side: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Go Back', style: TextStyle(color: Colors.white)),
+            child: Text('Go Back', style: TextStyle(color: Color(0xFF004F2D))),
           ),
           FilledButton(
             onPressed: () {
@@ -483,23 +483,23 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFFF7F9F9),
         body: Center(
           child: CircularProgressIndicator(
-            color: Colors.purple,
+            color: Color(0xFF004F2D),
           ),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Color(0xFFF7F9F9),
       extendBodyBehindAppBar: false,
       appBar: AppBar(
         title: Text(
           'Ride to ${_ride.toAddress.split(',').first}',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: Colors.black,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -507,7 +507,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         scrolledUnderElevation: 4,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: Color(0xFF004F2D)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -521,8 +521,8 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.black,
-              Colors.purple[900]!,
+              Color(0xFFF7F9F9),
+              Color(0xFFF7F9F9),
             ],
           ),
         ),
@@ -538,14 +538,17 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                     'Pickup Location',
                     _ride.fromAddress,
                   ),
+                  const SizedBox(height: 16), 
                   _buildDetailCard(
                     Icons.flag_outlined,
                     'Destination',
                     _ride.toAddress,
                   ),
+                  const SizedBox(height: 16), 
                   _buildSeatInfoCard(),
+                  const SizedBox(height: 16), 
                   GlassCard(
-                    color: Colors.black,
+                    color: Colors.white,
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Column(
@@ -556,13 +559,13 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Colors.purple.withOpacity(0.1),
+                                  color: Color(0xFF004F2D).withOpacity(0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
                                   Icons.directions_car_filled,
                                   size: 24,
-                                  color: Colors.purple,
+                                  color: Color(0xFF004F2D),
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -570,7 +573,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                                 child: Text(
                                   'Ride-Sharing Companies',
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.6),
+                                    color: Colors.black.withOpacity(0.6),
                                   ),
                                 ),
                               ),
@@ -589,6 +592,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  const SizedBox(height: 16), 
                   ..._buildActionButtons(),
                   const SizedBox(height: 20),
                   if (!_isDriver && !_isParticipant)
@@ -596,7 +600,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                       'By joining this ride, you agree to our Terms of Service and Community Guidelines',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.4),
+                        color: Colors.black.withOpacity(0.4),
                       ),
                     ),
                 ]),
