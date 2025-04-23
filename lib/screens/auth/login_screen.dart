@@ -47,10 +47,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       if (_useOtp) {
-        await authService.login(
-          phone: _phoneController.text.trim(),
-          otp: _otpController.text.trim(),
-        );
+        await authService.login(phone: _phoneController.text.trim(), otp: _otpController.text.trim());
       } else {
         await authService.login(
           email: _useEmail ? _emailController.text.trim() : null,
@@ -58,9 +55,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           password: _passwordController.text.trim(),
         );
       }
-      if (mounted) Navigator.pushReplacementNamed(context, '/rides');
+      if (mounted) Navigator.of(context).pushReplacementNamed('/rides');
     } catch (e) {
-      _showError(e.toString());
+      _showMessage(e.toString(), isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -70,32 +67,22 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     if (_phoneController.text.trim().isEmpty) return;
     setState(() => _isLoading = true);
     try {
-      await Provider.of<AuthService>(context, listen: false).requestOtp(_phoneController.text.trim());
-      _showSuccess('OTP sent successfully');
+      final authService = Provider.of<AuthService>(context, listen: false);
+      await authService.requestOtp(_phoneController.text.trim());
+      _showMessage('OTP sent to your phone.');
     } catch (e) {
-      _showError(e.toString());
+      _showMessage(e.toString(), isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _showError(String message) {
+  void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red[700],
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  void _showSuccess(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green[700],
+        backgroundColor: isError ? Colors.red[700] : Colors.green[700],
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -117,58 +104,24 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 children: [
                   const Text(
                     'Welcome Back',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
                     textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black),
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     'Sign in to continue',
-                    style: TextStyle(color: Colors.black87),
                     textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.black87),
                   ),
                   const SizedBox(height: 32),
 
-                  Center(
-                    child: ToggleButtons(
-                      isSelected: [_useEmail, !_useEmail],
-                      onPressed: (index) {
-                        setState(() {
-                          _useEmail = index == 0;
-                          _useOtp = false;
-                          _controller.forward(from: 0);
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      fillColor: const Color(0xFF004F2D),
-                      selectedColor: Colors.white,
-                      color: Colors.black,
-                      constraints: const BoxConstraints(minHeight: 40, minWidth: 100),
-                      children: const [Text("Email"), Text("Phone")],
-                    ),
-                  ),
-
+                  _buildToggle(),
                   const SizedBox(height: 24),
 
-                  if (_useEmail)
-                    _buildTextField(
-                      controller: _emailController,
-                      label: 'Email',
-                      icon: Icons.email,
-                      validator: (v) => v!.contains('@') ? null : 'Invalid email',
-                    )
-                  else
-                    _buildTextField(
-                      controller: _phoneController,
-                      label: 'Phone Number',
-                      icon: Icons.phone,
-                      keyboardType: TextInputType.phone,
-                      validator: (v) => v!.length < 10 ? 'Invalid phone number' : null,
-                    ),
-                  
+                  _useEmail
+                      ? _buildTextField(controller: _emailController, label: 'Email', icon: Icons.email, validator: (v) => v!.contains('@') ? null : 'Invalid email')
+                      : _buildTextField(controller: _phoneController, label: 'Phone Number', icon: Icons.phone, keyboardType: TextInputType.phone, validator: (v) => v!.length < 10 ? 'Invalid phone number' : null),
+
                   const SizedBox(height: 16),
 
                   if (!_useEmail && !_useOtp)
@@ -189,19 +142,18 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                       validator: (v) => v!.length < 6 ? 'Min 6 characters' : null,
                     ),
 
-                  if (_useOtp) ...[
+                  if (_useOtp)
                     _buildTextField(
                       controller: _otpController,
                       label: 'OTP Code',
                       icon: Icons.sms,
                       keyboardType: TextInputType.number,
-                      validator: (v) => v!.length == 6 ? null : '6-digit OTP required',
+                      validator: (v) => v!.length == 6 ? null : 'Enter 6-digit code',
                       suffix: TextButton(
                         onPressed: _requestOtp,
                         child: const Text('Send OTP', style: TextStyle(color: Color(0xFF004F2D))),
                       ),
                     ),
-                  ],
 
                   const SizedBox(height: 24),
                   _buildLoginButton(),
@@ -212,6 +164,27 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildToggle() {
+    return Center(
+      child: ToggleButtons(
+        isSelected: [_useEmail, !_useEmail],
+        onPressed: (index) {
+          setState(() {
+            _useEmail = index == 0;
+            _useOtp = false;
+            _controller.forward(from: 0);
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        fillColor: const Color(0xFF004F2D),
+        selectedColor: Colors.white,
+        color: Colors.black,
+        constraints: const BoxConstraints(minHeight: 40, minWidth: 100),
+        children: const [Text("Email"), Text("Phone")],
       ),
     );
   }
@@ -227,10 +200,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: Colors.black),
       obscureText: obscureText,
       keyboardType: keyboardType,
       validator: validator,
+      style: const TextStyle(color: Colors.black),
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: const Color(0xFF004F2D)),
