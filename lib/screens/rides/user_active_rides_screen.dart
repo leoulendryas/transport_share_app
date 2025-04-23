@@ -7,6 +7,7 @@ import '../../models/ride.dart';
 import '../../widgets/ride_card.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/error_retry.dart';
+import 'package:flutter/foundation.dart';
 
 class UserActiveRidesScreen extends StatefulWidget {
   const UserActiveRidesScreen({super.key});
@@ -20,6 +21,7 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
   final int _itemsPerPage = 10;
   bool _isLoading = false;
   bool _hasError = false;
+  bool _initialLoadComplete = false;
   String? _errorMessage;
   List<Ride> _rides = [];
   int _totalRides = 0;
@@ -31,7 +33,9 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
     super.initState();
     _authService = Provider.of<AuthService>(context, listen: false);
     _apiService = Provider.of<ApiService>(context, listen: false);
-    _initializeAndLoad();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeAndLoad();
+    });
   }
 
   @override
@@ -42,6 +46,9 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
 
   void _authListener() {
     if (_authService.isAuthenticated && mounted) {
+      if (kDebugMode) {
+        print('Auth state changed - refreshing rides');
+      }
       _refreshRides();
     }
   }
@@ -55,32 +62,65 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
   Future<void> _initializeAndLoad() async {
     if (!mounted) return;
 
+    if (kDebugMode) {
+      print('Initializing and loading rides...');
+    }
+
     try {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+
       if (!_authService.isInitialized) {
+        if (kDebugMode) {
+          print('AuthService not initialized - initializing...');
+        }
         await _authService.init();
       }
 
       if (!mounted) return;
 
       if (_authService.isAuthenticated) {
+        if (kDebugMode) {
+          print('User is authenticated - loading rides');
+        }
         await _loadRides();
       } else {
+        if (kDebugMode) {
+          print('User is not authenticated');
+        }
         setState(() {
           _hasError = true;
           _errorMessage = 'Authentication required';
+          _isLoading = false;
         });
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('Initialization error: $e');
+      }
       if (!mounted) return;
       setState(() {
         _hasError = true;
         _errorMessage = 'Initialization failed: ${e.toString()}';
+        _isLoading = false;
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _initialLoadComplete = true;
+        });
+      }
     }
   }
 
   Future<void> _loadRides() async {
     if (!mounted) return;
+
+    if (kDebugMode) {
+      print('Loading rides for page $_currentPage');
+    }
 
     setState(() {
       _isLoading = true;
@@ -96,37 +136,64 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
       if (!mounted) return;
 
       setState(() {
-        _rides = (response['results'] as List)
-            .map((rideJson) => Ride.fromJson(rideJson))
-            .toList();
+        if (_currentPage == 1) {
+          _rides = (response['results'] as List)
+              .map((rideJson) => Ride.fromJson(rideJson))
+              .toList();
+        } else {
+          _rides.addAll((response['results'] as List)
+              .map((rideJson) => Ride.fromJson(rideJson))
+              .toList());
+        }
         _totalRides = response['pagination']['total'] as int;
         _isLoading = false;
       });
     } on ApiException catch (e) {
+      if (kDebugMode) {
+        print('API error: ${e.message}');
+      }
       if (!mounted) return;
       setState(() {
         _hasError = true;
         _errorMessage = e.message;
         _isLoading = false;
+        // Reset page if we're not on the first page
+        if (_currentPage > 1) {
+          _currentPage--;
+        }
       });
     } catch (e) {
+      if (kDebugMode) {
+        print('Unexpected error: $e');
+      }
       if (!mounted) return;
       setState(() {
         _hasError = true;
         _errorMessage = 'An unexpected error occurred';
         _isLoading = false;
+        if (_currentPage > 1) {
+          _currentPage--;
+        }
       });
     }
   }
 
   void _refreshRides() {
     if (!mounted) return;
-    _currentPage = 1;
+    if (kDebugMode) {
+      print('Refreshing rides');
+    }
+    setState(() {
+      _currentPage = 1;
+    });
     _loadRides();
   }
 
   void _loadNextPage() {
     if (_rides.length < _totalRides && !_isLoading && mounted) {
+      if (kDebugMode) {
+        print('Loading next page');
+      }
       _currentPage++;
       _loadRides();
     }
@@ -134,6 +201,14 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_initialLoadComplete) {
+      return const Scaffold(
+        body: Center(
+          child: LoadingIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9F9),
       appBar: AppBar(
@@ -165,7 +240,7 @@ class _UserActiveRidesScreenState extends State<UserActiveRidesScreen> {
     if (_hasError) {
       return ErrorRetry(
         errorMessage: _errorMessage,
-        onRetry: _loadRides,
+        onRetry: _refreshRides,
       );
     }
 
