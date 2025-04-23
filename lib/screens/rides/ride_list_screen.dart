@@ -422,7 +422,7 @@ class _RideListScreenState extends State<RideListScreen> {
                 : 'Be the first to create this route!',
             style: const TextStyle(
               fontSize: 16,
-              color: Colors.white70,
+              color: Colors.black,
             ),
             textAlign: TextAlign.center,
           ),
