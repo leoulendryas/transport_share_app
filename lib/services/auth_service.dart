@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:synchronized/synchronized.dart';
 
 class AuthService extends ChangeNotifier {
   static const String _baseUrl = 'https://transport-share-backend.onrender.com';
+
+  // Keys for SharedPreferences
   static const String _tokenKey = 'auth_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userIdKey = 'user_id';
@@ -13,7 +17,12 @@ class AuthService extends ChangeNotifier {
   static const String _firstNameKey = 'first_name';
   static const String _lastNameKey = 'last_name';
   static const String _tokenExpiryKey = 'token_expiry';
+  static const String _emailVerifiedKey = 'email_verified';
+  static const String _phoneVerifiedKey = 'phone_verified';
 
+  static const Duration _tokenRefreshBuffer = Duration(minutes: 5);
+
+  // Internal State
   String? _token;
   String? _refreshToken;
   String? _userId;
@@ -22,7 +31,10 @@ class AuthService extends ChangeNotifier {
   String? _firstName;
   String? _lastName;
   DateTime? _tokenExpiry;
+
   bool _initialized = false;
+  bool _isRefreshing = false;
+  final Lock _lock = Lock();
   SharedPreferences? _prefs;
 
   // Getters
@@ -35,37 +47,80 @@ class AuthService extends ChangeNotifier {
   String? get lastName => _lastName;
   bool get isAuthenticated => _token != null && !_isTokenExpired;
   bool get isInitialized => _initialized;
-  bool get _isTokenExpired => _tokenExpiry?.isBefore(DateTime.now()) ?? true;
+  bool get isEmailVerified => _prefs?.getBool(_emailVerifiedKey) ?? false;
+  bool get isPhoneVerified => _prefs?.getBool(_phoneVerifiedKey) ?? false;
+
+  bool get _isTokenExpired =>
+      _tokenExpiry?.isBefore(DateTime.now().toUtc()) ?? true;
 
   Future<void> init() async {
     if (_initialized) return;
+    debugPrint('[AuthService] Initialization started');
 
     try {
       _prefs = await SharedPreferences.getInstance();
-      _token = _prefs?.getString(_tokenKey);
-      _refreshToken = _prefs?.getString(_refreshTokenKey);
-      _userId = _prefs?.getString(_userIdKey);
-      _email = _prefs?.getString(_emailKey);
-      _phone = _prefs?.getString(_phoneKey);
-      _firstName = _prefs?.getString(_firstNameKey);
-      _lastName = _prefs?.getString(_lastNameKey);
-      final expiryString = _prefs?.getString(_tokenExpiryKey);
-      if (expiryString != null) {
-        _tokenExpiry = DateTime.parse(expiryString);
-      }
+      await _lock.synchronized(() async {
+        _token = _prefs?.getString(_tokenKey);
+        _refreshToken = _prefs?.getString(_refreshTokenKey);
+        _userId = _prefs?.getString(_userIdKey);
+        
+        // Handle empty strings from SharedPreferences
+        _email = _prefs?.getString(_emailKey)?.isNotEmpty == true 
+            ? _prefs!.getString(_emailKey) 
+            : null;
+        _phone = _prefs?.getString(_phoneKey)?.isNotEmpty == true
+            ? _prefs!.getString(_phoneKey)
+            : null;
+        _firstName = _prefs?.getString(_firstNameKey)?.isNotEmpty == true
+            ? _prefs!.getString(_firstNameKey)
+            : null;
+        _lastName = _prefs?.getString(_lastNameKey)?.isNotEmpty == true
+            ? _prefs!.getString(_lastNameKey)
+            : null;
 
-      _initialized = true;
-      notifyListeners();
+        final expiryString = _prefs?.getString(_tokenExpiryKey);
+        _tokenExpiry = expiryString != null
+            ? DateTime.parse(expiryString).toUtc()
+            : null;
+
+        _initialized = true;
+        debugPrint('[AuthService] Initialization completed. '
+            'Token exists: ${_token != null}, '
+            'User ID: $_userId');
+        notifyListeners();
+      });
     } catch (e) {
-      debugPrint('Failed to initialize AuthService: $e');
-      _initialized = true;
-      notifyListeners();
+      _initialized = false;
+      debugPrint('[AuthService] Initialization error: $e');
       rethrow;
     }
   }
 
   Future<void> ensureInitialized() async {
-    if (!_initialized) await init();
+    if (!_initialized) {
+      debugPrint('[AuthService] Ensuring initialization');
+      await init();
+    }
+  }
+
+  Future<void> login({
+    String? email,
+    String? phone,
+    String? password,
+    String? otp,
+  }) async {
+    await _safeApiCall(() async {
+      await ensureInitialized();
+      if (otp != null) {
+        await _loginWithOtp(phone!, otp);
+      } else {
+        await _loginWithPassword(
+          email: email,
+          phone: phone,
+          password: password!,
+        );
+      }
+    });
   }
 
   Future<void> register({
@@ -75,40 +130,26 @@ class AuthService extends ChangeNotifier {
     String? phone,
     required String password,
   }) async {
-    await ensureInitialized();
-    if (email == null && phone == null) {
-      throw Exception('Email or phone is required');
-    }
-    _validatePassword(password);
+    await _safeApiCall(() async {
+      await ensureInitialized();
+      if (email == null && phone == null) {
+        throw const AppException('Email or phone required');
+      }
 
-    final response = await http.post(
-      Uri.parse('$_baseUrl/auth/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'first_name': firstName,
-        'last_name': lastName,
-        if (email != null) 'email': email,
-        if (phone != null) 'phone_number': phone,
-        'password': password,
-      }),
-    );
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'first_name': firstName,
+          'last_name': lastName,
+          if (email != null) 'email': email,
+          if (phone != null) 'phone_number': phone,
+          'password': password,
+        }),
+      );
 
-    _handleAuthResponse(response);
-  }
-
-  Future<void> login({
-    String? email,
-    String? phone,
-    String? password,
-    String? otp,
-  }) async {
-    await ensureInitialized();
-    
-    if (otp != null) {
-      await _loginWithOtp(phone!, otp);
-    } else {
-      await _loginWithPassword(email: email, phone: phone, password: password!);
-    }
+      await _handleAuthResponse(response);
+    });
   }
 
   Future<void> _loginWithPassword({
@@ -117,9 +158,9 @@ class AuthService extends ChangeNotifier {
     required String password,
   }) async {
     if (email == null && phone == null) {
-      throw Exception('Email or phone is required');
+      throw const AppException('Email or phone required');
     }
-    
+
     final response = await http.post(
       Uri.parse('$_baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
@@ -130,40 +171,7 @@ class AuthService extends ChangeNotifier {
       }),
     );
 
-    final responseData = _handleAuthResponse(response);
-    await _persistAuthData(responseData);
-  }
-
-
-  // Add these to your AuthService class
-  bool get isEmailVerified => _prefs?.getBool('email_verified') ?? false;
-  bool get isPhoneVerified => _prefs?.getBool('phone_verified') ?? false;
-
-  // Add to AuthService class
-  Future<void> verifyEmail(String token) async {
-   await ensureInitialized();
-   final response = await http.get(
-     Uri.parse('$_baseUrl/auth/verify-email?token=$token'),
-   );
-
-   // Get the response data first
-   final responseData = _handleAuthResponse(response);
-
-   // Then persist the auth data
-   await _persistAuthData(responseData);
-
-   // Update verification status
-   await _prefs?.setBool('email_verified', true);
-   notifyListeners();
-} 
-
-  Future<void> resendVerificationEmail(String email) async {
-    await ensureInitialized();
-    final response = await http.post(
-      Uri.parse('$_baseUrl/auth/resend-verification'),
-      body: jsonEncode({'email': email}),
-    );
-    _handleAuthResponse(response);
+    await _handleAuthResponse(response);
   }
 
   Future<void> _loginWithOtp(String phone, String otp) async {
@@ -176,180 +184,224 @@ class AuthService extends ChangeNotifier {
       }),
     );
 
-    final responseData = _handleAuthResponse(response);
-    await _persistAuthData(responseData);
+    await _handleAuthResponse(response);
+  }
+
+  Future<void> verifyEmail(String token) async {
+    await _safeApiCall(() async {
+      await ensureInitialized();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/auth/verify-email?token=$token'),
+      );
+      await _handleAuthResponse(response);
+    });
+  }
+
+  Future<void> resendVerificationEmail(String email) async {
+    await _safeApiCall(() async {
+      await ensureInitialized();
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/resend-verification'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+      _handleAuthResponse(response);
+    });
   }
 
   Future<void> requestOtp(String phoneNumber) async {
-    await ensureInitialized();
-    _validatePhone(phoneNumber);
-
-    final response = await http.post(
-      Uri.parse('$_baseUrl/auth/request-otp'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone_number': phoneNumber}),
-    );
-
-    _handleAuthResponse(response);
+    await _safeApiCall(() async {
+      await ensureInitialized();
+      final response = await http.post(
+        Uri.parse('$_baseUrl/auth/request-otp'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'phone_number': phoneNumber}),
+      );
+      _handleAuthResponse(response);
+    });
   }
 
   Future<String?> refreshAuthToken() async {
-    await ensureInitialized();
-    if (_refreshToken == null) return null;
+    return await _lock.synchronized(() async {
+      if (_isRefreshing) return _token;
+      _isRefreshing = true;
+      debugPrint('[AuthService] Starting token refresh');
 
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/auth/refresh-token'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': _refreshToken}),
-      );
+      try {
+        await ensureInitialized();
+        if (_refreshToken == null) {
+          debugPrint('[AuthService] No refresh token available');
+          await logout();
+          return null;
+        }
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _token = data['token'];
-        _tokenExpiry = _calculateExpiry(data['expiresIn'] ?? 3600);
-        await _prefs?.setString(_tokenKey, _token!);
-        await _prefs?.setString(_tokenExpiryKey, _tokenExpiry!.toIso8601String());
-        notifyListeners();
-        return _token;
-      } else {
+        final response = await http.post(
+          Uri.parse('$_baseUrl/auth/refresh'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'refresh_token': _refreshToken}),
+        );
+
+        if (response.statusCode == 200) {
+          final data = _parseResponse(response);
+          await _persistAuthData(data);
+          debugPrint('[AuthService] Token refresh successful');
+          return _token;
+        }
+        debugPrint('[AuthService] Token refresh failed: ${response.statusCode}');
         await logout();
         return null;
+      } catch (e) {
+        debugPrint('[AuthService] Token refresh error: $e');
+        await logout();
+        return null;
+      } finally {
+        _isRefreshing = false;
       }
-    } catch (e) {
-      debugPrint('Token refresh failed: $e');
-      await logout();
-      return null;
-    }
+    });
   }
 
   Future<void> logout() async {
-    await ensureInitialized();
-    try {
-      if (_token != null && !_isTokenExpired) {
-        await http.post(
-          Uri.parse('$_baseUrl/auth/logout'),
-          headers: {'Authorization': 'Bearer $_token'},
-        ).timeout(const Duration(seconds: 5));
-      }
-    } catch (e) {
-      debugPrint('Logout API error: $e');
-    } finally {
-      await _clearAuthData();
-    }
-  }
-
-  Future<bool> tryAutoLogin() async {
-    await ensureInitialized();
-    if (_token == null || _isTokenExpired) {
-      return _refreshToken != null ? await refreshAuthToken() != null : false;
-    }
-    return true;
-  }
-
-  DateTime _calculateExpiry(int expiresInSeconds) {
-    return DateTime.now().add(Duration(seconds: expiresInSeconds));
-  }
-
-  void _validateEmail(String email) {
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
-      throw Exception('Invalid email format');
-    }
-  }
-
-  void _validatePhone(String phone) {
-    if (phone.length < 10) {
-      throw Exception('Invalid phone number');
-    }
-  }
-
-  void _validatePassword(String password) {
-    if (password.length < 6) {
-      throw Exception('Password must be at least 6 characters');
-    }
-  }
-
-  dynamic _handleAuthResponse(http.Response response) {
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(response.body);
-    } else {
-      final errorData = jsonDecode(response.body);
-      throw Exception(errorData['error'] ?? 'Request failed');
-    }
-  }
-
-  Future<void> _persistAuthData(Map<String, dynamic> data) async {
-    try {
-      _token = data['token'];
-      _userId = data['user']['id'].toString();
-      _email = data['user']['email'];
-      _phone = data['user']['phone_number'];
-      _firstName = data['user']['first_name'];
-      _lastName = data['user']['last_name'];
-      _refreshToken = data['refreshToken'] ?? _refreshToken;
-      _tokenExpiry = _calculateExpiry(data['expiresIn'] ?? 3600);
-
+    await _safeApiCall(() async {
       await ensureInitialized();
-
-      await Future.wait([
-        _prefs!.setString(_tokenKey, _token!),
-        _prefs!.setString(_userIdKey, _userId!),
-        if (_email != null) _prefs!.setString(_emailKey, _email!),
-        if (_phone != null) _prefs!.setString(_phoneKey, _phone!),
-        _prefs!.setString(_firstNameKey, _firstName!),
-        _prefs!.setString(_lastNameKey, _lastName!),
-        _prefs!.setString(_tokenExpiryKey, _tokenExpiry!.toIso8601String()),
-        if (_refreshToken != null) _prefs!.setString(_refreshTokenKey, _refreshToken!),
-      ]);
-
-      notifyListeners();
-    } catch (e) {
-      await _clearAuthData();
-      rethrow;
-    }
-  }
-
-  Future<void> _clearAuthData() async {
-    await ensureInitialized();
-
-    final futures = <Future>[
-      _prefs!.remove(_tokenKey),
-      _prefs!.remove(_refreshTokenKey),
-      _prefs!.remove(_userIdKey),
-      _prefs!.remove(_emailKey),
-      _prefs!.remove(_phoneKey),
-      _prefs!.remove(_firstNameKey),
-      _prefs!.remove(_lastNameKey),
-      _prefs!.remove(_tokenExpiryKey),
-    ];
-
-    await Future.wait(futures);
-
-    _token = null;
-    _refreshToken = null;
-    _userId = null;
-    _email = null;
-    _phone = null;
-    _firstName = null;
-    _lastName = null;
-    _tokenExpiry = null;
-    notifyListeners();
-  }
-
-  Future<String?> getToken() async {
-    await ensureInitialized();
-    if (_isTokenExpired && _refreshToken != null) {
-      await refreshAuthToken();
-    }
-    return _token;
+      debugPrint('[AuthService] Logging out');
+      try {
+        if (_token != null) {
+          await http.post(
+            Uri.parse('$_baseUrl/auth/logout'),
+            headers: await getAuthHeaders(),
+          );
+        }
+      } finally {
+        await _clearAuthData();
+      }
+    });
   }
 
   Future<Map<String, String>> getAuthHeaders() async {
-    await ensureInitialized();
-    final currentToken = await getToken();
+    if (!_initialized) await init();
     return {
-      if (currentToken != null) 'Authorization': 'Bearer $currentToken',
+      'Authorization': 'Bearer $_token',
       'Content-Type': 'application/json',
     };
   }
+
+  Future<void> _handleAuthResponse(http.Response response) async {
+    final data = _parseResponse(response);
+    await _persistAuthData(data);
+  }
+
+  Map<String, dynamic> _parseResponse(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AppException('Error: ${response.statusCode} - ${response.body}');
+    }
+    return jsonDecode(response.body);
+  }
+
+  Future<void> _persistAuthData(Map<String, dynamic> data) async {
+    await _lock.synchronized(() async {
+      final user = data['user'];
+      _token = data['access_token'];
+      _refreshToken = data['refresh_token'];
+      _tokenExpiry = DateTime.now().toUtc().add(Duration(seconds: data['expires_in']));
+
+      _userId = user['id'].toString();
+      _email = user['email']?.toString();
+      _phone = user['phone_number']?.toString();
+      _firstName = user['first_name']?.toString();
+      _lastName = user['last_name']?.toString();
+
+      await _prefs?.setString(_tokenKey, _token!);
+      await _prefs?.setString(_refreshTokenKey, _refreshToken!);
+      await _prefs?.setString(_userIdKey, _userId!);
+      await _prefs?.setString(_emailKey, _email ?? '');
+      await _prefs?.setString(_phoneKey, _phone ?? '');
+      await _prefs?.setString(_firstNameKey, _firstName ?? '');
+      await _prefs?.setString(_lastNameKey, _lastName ?? '');
+      await _prefs?.setString(_tokenExpiryKey, _tokenExpiry!.toUtc().toIso8601String());
+      await _prefs?.setBool(_emailVerifiedKey, user['email_verified'] ?? false);
+      await _prefs?.setBool(_phoneVerifiedKey, user['phone_verified'] ?? false);
+
+      debugPrint('[AuthService] Auth data persisted for user $_userId');
+      notifyListeners();
+    });
+  }
+
+  Future<void> _clearAuthData() async {
+    await _lock.synchronized(() async {
+      _token = null;
+      _refreshToken = null;
+      _userId = null;
+      _email = null;
+      _phone = null;
+      _firstName = null;
+      _lastName = null;
+      _tokenExpiry = null;
+
+      final keysToRemove = [
+        _tokenKey,
+        _refreshTokenKey,
+        _userIdKey,
+        _emailKey,
+        _phoneKey,
+        _firstNameKey,
+        _lastNameKey,
+        _tokenExpiryKey,
+        _emailVerifiedKey,
+        _phoneVerifiedKey,
+      ];
+
+      for (final key in keysToRemove) {
+        await _prefs?.remove(key);
+      }
+
+      debugPrint('[AuthService] Auth data cleared');
+      notifyListeners();
+    });
+  }
+
+  Future<String?> getToken() async {
+    if (!_initialized) await init();
+    debugPrint('[AuthService] Token requested. Initialized: $_initialized');
+
+    return await _lock.synchronized(() async {
+      if (_token == null) {
+        debugPrint('[AuthService] No token available');
+        return null;
+      }
+
+      final bufferExpiry = _tokenExpiry?.subtract(_tokenRefreshBuffer);
+      final now = DateTime.now().toUtc();
+      final needsRefresh = bufferExpiry == null || bufferExpiry.isBefore(now);
+
+      if (needsRefresh && _refreshToken != null) {
+        debugPrint('[AuthService] Token needs refresh');
+        if (!_isRefreshing) {
+          await refreshAuthToken();
+        } else {
+          debugPrint('[AuthService] Waiting for existing refresh to complete');
+          while (_isRefreshing) {
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+        }
+      }
+
+      return _token;
+    });
+  }
+
+  Future<void> _safeApiCall(Future<void> Function() apiCall) async {
+    try {
+      await apiCall();
+    } catch (e) {
+      debugPrint('[AuthService] API call failed: $e');
+      rethrow;
+    }
+  }
+}
+
+class AppException implements Exception {
+  final String message;
+  const AppException(this.message);
+  @override
+  String toString() => 'AppException: $message';
 }
