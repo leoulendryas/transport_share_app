@@ -1,79 +1,151 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 import '../models/ride.dart';
 import '../models/user.dart';
 import '../models/message.dart';
 import 'auth_service.dart';
 import '../models/lat_lng.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiException implements Exception {
   final String message;
   final int statusCode;
+  final dynamic data;
 
-  ApiException(this.message, this.statusCode);
+  ApiException(this.message, this.statusCode, [this.data]);
 
   @override
   String toString() => 'ApiException: $message (Status: $statusCode)';
 }
 
 class ApiService {
-  final String baseUrl = 'https://transport-share-backend.onrender.com';
+  static const String _baseUrl = 'https://transport-share-backend.onrender.com';
+  static const int _maxLimit = 50;
+  static const Duration _cacheDuration = Duration(minutes: 5);
+  static const Duration _rateLimitWindow = Duration(seconds: 10);
+
   final AuthService authService;
+  final Lock _lock = Lock();
+  final Map<String, Map<String, dynamic>> _responseCache = {};
+  final Map<String, DateTime> _lastApiCalls = {};
+  final Map<String, int> _rateLimitCounters = {};
 
   ApiService(this.authService);
 
   Future<Map<String, String>> _getHeaders() async {
-    try {
-      final token = await authService.token;
-      if (kDebugMode) {
-        print('Current auth token: ${token != null ? 'exists' : 'null'}');
-      }
-      return {
+    return await _lock.synchronized(() async {
+      final headers = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
+        'User-Agent': 'TransportShare/1.0 (Flutter)',
       };
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error getting headers: $e');
+
+      try {
+        final token = await authService.getToken();
+        if (kDebugMode) {
+  print('Retrieved token: $token');
+}
+
+        if (token != null && token.isNotEmpty) {
+          headers['Authorization'] = 'Bearer $token';
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error getting token: $e');
+        }
       }
-      rethrow;
-    }
+
+      return headers;
+    });
   }
 
   Future<http.Response> _makeAuthenticatedRequest(
-    Future<http.Response> Function() requestFn,
-  ) async {
-    // First attempt
-    final firstResponse = await requestFn();
-    
-    // If not unauthorized, return the response
-    if (firstResponse.statusCode != 401) {
-      return firstResponse;
+    Future<http.Response> Function() requestFn, {
+    String? endpointKey,
+    int maxRetries = 1,
+  }) async {
+    int attempt = 0;
+    http.Response? lastResponse;
+
+    if (endpointKey != null) {
+      _checkRateLimit(endpointKey);
     }
 
-    // Attempt to refresh token
+    while (attempt <= maxRetries) {
+      attempt++;
+      try {
+        lastResponse = await requestFn();
+        final statusCode = lastResponse.statusCode;
+
+        if (statusCode != 401) {
+          return lastResponse;
+        }
+
+        if (attempt > maxRetries) break;
+
+        final newToken = await authService.refreshAuthToken();
+        if (newToken == null) {
+          throw ApiException('Session expired. Please login again.', 401);
+        }
+
+        // Retry with new token
+        continue;
+      } catch (e) {
+        if (attempt > maxRetries) {
+          if (e is ApiException) rethrow;
+          throw ApiException('Request failed after $attempt attempts', 0);
+        }
+      }
+    }
+
+    throw _parseErrorResponse(lastResponse);
+  }
+
+  void _checkRateLimit(String endpointKey) {
+    final now = DateTime.now();
+    final lastCall = _lastApiCalls[endpointKey];
+    final counter = _rateLimitCounters[endpointKey] ?? 0;
+
+    if (lastCall != null && now.difference(lastCall) < _rateLimitWindow) {
+      if (counter >= 10) {
+        throw ApiException('Too many requests. Please slow down.', 429);
+      }
+      _rateLimitCounters[endpointKey] = counter + 1;
+    } else {
+      _rateLimitCounters[endpointKey] = 1;
+      _lastApiCalls[endpointKey] = now;
+    }
+  }
+
+  ApiException _parseErrorResponse(http.Response? response) {
+    if (response == null) {
+      return ApiException('No response received', 0);
+    }
+
     try {
-      if (kDebugMode) {
-        print('Attempting token refresh due to 401 response');
-      }
-      
-      final newToken = await authService.refreshAuthToken();
-      if (newToken == null) {
-        throw ApiException('Authentication required', 401);
-      }
-
-      // Retry with new token
-      final retryResponse = await requestFn();
-      return retryResponse;
+      final errorData = jsonDecode(response.body);
+      return ApiException(
+        errorData['error'] ?? errorData['message'] ?? 'Request failed',
+        response.statusCode,
+        errorData,
+      );
     } catch (e) {
-      if (kDebugMode) {
-        print('Token refresh failed: $e');
-      }
-      return firstResponse; // Return original 401 response if refresh fails
+      return ApiException('Invalid server response', response.statusCode);
     }
+  }
+
+  Map<String, dynamic> _handleResponse(http.Response response) {
+    if (kDebugMode) {
+      print('Response (${response.statusCode}): ${response.body}');
+    }
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+
+    throw _parseErrorResponse(response);
   }
 
   Future<Map<String, dynamic>> getRides({
@@ -85,9 +157,19 @@ class ApiService {
     int page = 1,
     int limit = 20,
     int? companyId,
+    bool forceRefresh = false,
   }) async {
+    if (page < 1) throw ApiException('Invalid page number', 400);
+    if (limit < 1 || limit > _maxLimit) {
+      throw ApiException('Limit must be between 1 and $_maxLimit', 400);
+    }
+
+    final cacheKey = 'rides_${fromLat}_${fromLng}_${toLat}_${toLng}_$page';
+    if (!forceRefresh && _isCacheValid(cacheKey)) {
+      return _responseCache[cacheKey]!;
+    }
+
     try {
-      final headers = await _getHeaders();
       final queryParams = {
         'from_lat': fromLat.toString(),
         'from_lng': fromLng.toString(),
@@ -96,35 +178,31 @@ class ApiService {
         'radius': radius.toString(),
         'page': page.toString(),
         'limit': limit.toString(),
-        'timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
         if (companyId != null) 'company_id': companyId.toString(),
       };
 
-      final uri = Uri.parse('$baseUrl/rides').replace(queryParameters: queryParams);
-      if (kDebugMode) {
-        print('GET Rides URL: ${uri.toString()}');
-      }
-
+      final uri = Uri.parse('$_baseUrl/rides').replace(queryParameters: queryParams);
+      
       final response = await _makeAuthenticatedRequest(
-        () => http.get(uri, headers: headers),
+        () async => http.get(uri, headers: await _getHeaders()),
+        endpointKey: 'rides',
+        maxRetries: 2,
       );
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      } else {
-        final errorData = jsonDecode(response.body) as Map<String, dynamic>;
-        throw ApiException(
-          errorData['error'] ?? 'Failed to load rides',
-          response.statusCode,
-        );
-      }
-    } on http.ClientException catch (e) {
-      throw ApiException('Network error: ${e.message}', 0);
-    } on FormatException catch (e) {
-      throw ApiException('Data parsing error: ${e.message}', 0);
+      final data = _handleResponse(response);
+      _responseCache[cacheKey] = data;
+      _responseCache[cacheKey]!['cached_at'] = DateTime.now();
+      return data;
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Unexpected error: ${e.toString()}', 0);
+      throw ApiException('Failed to load rides: ${e.toString()}', 0);
     }
+  }
+
+  bool _isCacheValid(String key) {
+    return _responseCache.containsKey(key) &&
+        DateTime.now().difference(_responseCache[key]!['cached_at']) < _cacheDuration;
   }
 
   Future<Ride> createRide({
@@ -140,12 +218,11 @@ class ApiService {
       if (seats < 1 || seats > 8) {
         throw ApiException('Seats must be between 1 and 8', 400);
       }
-  
+
       if (departureTime != null && departureTime.isBefore(DateTime.now())) {
         throw ApiException('Departure time must be in the future', 400);
       }
-  
-      final headers = await _getHeaders();
+
       final requestBody = {
         'from': {'lat': from.latitude, 'lng': from.longitude},
         'to': {'lat': to.latitude, 'lng': to.longitude},
@@ -155,327 +232,238 @@ class ApiService {
         'companies': companies,
         if (departureTime != null) 'departure_time': departureTime.toIso8601String(),
       };
-  
+
       final response = await _makeAuthenticatedRequest(
-        () => http.post(
-          Uri.parse('$baseUrl/rides'),
-          headers: headers,
+        () async => http.post(
+          Uri.parse('$_baseUrl/rides'),
+          headers: await _getHeaders(),
           body: jsonEncode(requestBody),
         ),
+        endpointKey: 'create_ride',
       );
-  
-      if (response.statusCode == 201) {
-        return Ride.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-      } else {
-        throw ApiException(
-          'Failed to create ride: ${response.body}',
-          response.statusCode,
-        );
-      }
+
+      return Ride.fromJson(_handleResponse(response));
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to create ride: ${e.toString()}', 0);
     }
   }
-
-  // [Previous methods remain the same until getUserActiveRides]
 
   Future<Map<String, dynamic>> getUserActiveRides({
-    required int page,
-    required int limit,
+    int page = 1,
+    int limit = 20,
   }) async {
     try {
-      final headers = await _getHeaders();
-      final queryParams = {
-        'page': page.toString(),
-        'limit': limit.toString(),
-        'timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
-      };
-  
-      final uri = Uri.parse('$baseUrl/rides/user/active-rides')
-          .replace(queryParameters: queryParams);
-  
-      if (kDebugMode) {
-        print('GET Active Rides URL: ${uri.toString()}');
+      if (page < 1) throw ApiException('Invalid page number', 400);
+      if (limit < 1 || limit > _maxLimit) {
+        throw ApiException('Limit must be between 1 and $_maxLimit', 400);
       }
-  
-      final response = await _makeAuthenticatedRequest(
-        () => http.get(uri, headers: headers),
+
+      final uri = Uri.parse('$_baseUrl/rides/user/active-rides').replace(
+        queryParameters: {
+          'page': page.toString(),
+          'limit': limit.toString(),
+        },
       );
-  
-      if (kDebugMode) {
-        print('Active Rides Response: ${response.statusCode}');
-      }
-  
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      } else {
-        final errorData = jsonDecode(response.body) as Map<String, dynamic>;
-        throw ApiException(
-          errorData['error'] ?? 'Failed to load user active rides',
-          response.statusCode,
-        );
-      }
-    } on http.ClientException catch (e) {
-      throw ApiException('Network error: ${e.message}', 0);
-    } on FormatException catch (e) {
-      throw ApiException('Data parsing error: ${e.message}', 0);
+
+      final response = await _makeAuthenticatedRequest(
+        () async => http.get(uri, headers: await _getHeaders()),
+        endpointKey: 'active_rides',
+      );
+
+      return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Unexpected error: ${e.toString()}', 0);
+      throw ApiException('Failed to load active rides: ${e.toString()}', 0);
     }
   }
-
-  // [Update all other methods similarly, wrapping the http calls with _makeAuthenticatedRequest]
 
   Future<void> joinRide(String rideId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await _makeAuthenticatedRequest(
-        () => http.post(
-          Uri.parse('$baseUrl/rides/$rideId/join'),
-          headers: headers,
-        ),
+      await _makeAuthenticatedRequest(
+        () async => http.post(
+          Uri.parse('$_baseUrl/rides/$rideId/join'),
+          headers: await _getHeaders()),
+        endpointKey: 'join_ride',
       );
-
-      if (response.statusCode != 200) {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to join ride',
-          response.statusCode,
-        );
-      }
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to join ride: ${e.toString()}', 0);
     }
   }
 
   Future<void> leaveRide(String rideId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await _makeAuthenticatedRequest(
-        () => http.post(
-          Uri.parse('$baseUrl/rides/$rideId/leave'),
-          headers: headers,
-        ),
+      await _makeAuthenticatedRequest(
+        () async => http.post(
+          Uri.parse('$_baseUrl/rides/$rideId/leave'),
+          headers: await _getHeaders()),
+        endpointKey: 'leave_ride',
       );
-
-      if (response.statusCode != 200) {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to leave ride',
-          response.statusCode,
-        );
-      }
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to leave ride: ${e.toString()}', 0);
     }
   }
 
   Future<void> cancelRide(String rideId) async {
     try {
-      final headers = await _getHeaders();
-      final response = await _makeAuthenticatedRequest(
-        () => http.post(
-          Uri.parse('$baseUrl/rides/$rideId/cancel'),
-          headers: headers,
-        ),
+      await _makeAuthenticatedRequest(
+        () async => http.post(
+          Uri.parse('$_baseUrl/rides/$rideId/cancel'),
+          headers: await _getHeaders()),
+        endpointKey: 'cancel_ride',
       );
-
-      if (response.statusCode != 200) {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to cancel ride',
-          response.statusCode,
-        );
-      }
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to cancel ride: ${e.toString()}', 0);
     }
   }
 
   Future<List<Message>> getMessages(String rideId) async {
     try {
-      final headers = await _getHeaders();
       final response = await _makeAuthenticatedRequest(
-        () => http.get(
-          Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
-          headers: headers,
-        ),
+        () async => http.get(
+          Uri.parse('$_baseUrl/messages/rides/$rideId/messages'),
+          headers: await _getHeaders()),
+        endpointKey: 'get_messages',
       );
 
-      final responseBody = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        if (responseBody is Map && responseBody.containsKey('messages')) {
-          return (responseBody['messages'] as List)
-              .map((msg) => Message.fromJson(msg as Map<String, dynamic>))
-              .toList();
-        } else if (responseBody is List) {
-          return responseBody
-              .map((msg) => Message.fromJson(msg as Map<String, dynamic>))
-              .toList();
-        } else {
-          throw ApiException('Unexpected response format', response.statusCode);
-        }
-      } else {
-        throw ApiException(
-          (responseBody as Map)['error']?.toString() ?? 'Failed to load messages',
-          response.statusCode,
-        );
-      }
-    } on FormatException {
-      throw ApiException('Invalid response format', 0);
+      final data = _handleResponse(response);
+      return (data['messages'] as List)
+          .map((msg) => Message.fromJson(msg))
+          .toList();
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: ${e.toString()}', 0);
+      throw ApiException('Failed to load messages: ${e.toString()}', 0);
     }
   }
 
   Future<Message> sendMessage(String rideId, String content) async {
     try {
       if (content.isEmpty || content.length > 500) {
-        throw ApiException('Message must be between 1 and 500 characters', 400);
+        throw ApiException('Message must be 1-500 characters', 400);
       }
 
-      final headers = await _getHeaders();
       final response = await _makeAuthenticatedRequest(
-        () => http.post(
-          Uri.parse('$baseUrl/messages/rides/$rideId/messages'),
-          headers: headers,
+        () async => http.post(
+          Uri.parse('$_baseUrl/messages/rides/$rideId/messages'),
+          headers: await _getHeaders(),
           body: jsonEncode({'content': content}),
         ),
+        endpointKey: 'send_message',
       );
 
-      final responseBody = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        return Message.fromJson(responseBody as Map<String, dynamic>);
-      } else {
-        throw ApiException(
-          (responseBody as Map)['error']?.toString() ?? 'Failed to send message',
-          response.statusCode,
-        );
-      }
-    } on FormatException {
-      throw ApiException('Invalid response format', 0);
+      return Message.fromJson(_handleResponse(response));
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException('Network error: ${e.toString()}', 0);
+      throw ApiException('Failed to send message: ${e.toString()}', 0);
     }
   }
 
   Future<void> sendSos(String rideId, double lat, double lng) async {
     try {
-      final headers = await _getHeaders();
       final response = await _makeAuthenticatedRequest(
-        () => http.post(
-          Uri.parse('$baseUrl/sos'),
-          headers: headers,
+        () async => http.post(
+          Uri.parse('$_baseUrl/sos'),
+          headers: await _getHeaders(),
           body: jsonEncode({
             'ride_id': rideId,
             'latitude': lat,
             'longitude': lng,
           }),
         ),
+        endpointKey: 'sos',
       );
-
-      if (response.statusCode != 201) {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to send SOS',
-          response.statusCode,
-        );
-      }
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to send SOS: ${e.toString()}', 0);
     }
   }
 
   Future<Ride> getRideDetails(String rideId) async {
     try {
-      final headers = await _getHeaders();
       final response = await _makeAuthenticatedRequest(
-        () => http.get(
-          Uri.parse('$baseUrl/rides/$rideId'),
-          headers: headers,
-        ),
+        () async => http.get(
+          Uri.parse('$_baseUrl/rides/$rideId'),
+          headers: await _getHeaders()),
+        endpointKey: 'ride_details',
       );
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        return Ride.fromJson(data);
-      } else {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to load ride details',
-          response.statusCode,
-        );
-      }
+      return Ride.fromJson(_handleResponse(response));
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to load ride details: ${e.toString()}', 0);
     }
   }
 
   Future<Map<String, dynamic>> checkRideParticipation(String rideId) async {
     try {
-      final headers = await _getHeaders();
       final response = await _makeAuthenticatedRequest(
-        () => http.get(
-          Uri.parse('$baseUrl/rides/$rideId/check-participation'),
-          headers: headers,
-        ),
+        () async => http.get(
+          Uri.parse('$_baseUrl/rides/$rideId/check-participation'),
+          headers: await _getHeaders()),
+        endpointKey: 'check_participation',
       );
-  
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to check participation',
-          response.statusCode,
-        );
-      }
+
+      return _handleResponse(response);
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to check participation: ${e.toString()}', 0);
     }
   }
 
-  Future<Map<String, dynamic>> getUserProfile() async {
+  Future<User> getUserProfile() async {
     try {
-      final headers = await _getHeaders();
       final response = await _makeAuthenticatedRequest(
-        () => http.get(
-          Uri.parse('$baseUrl/profile'),
-          headers: headers,
-        ),
+        () async => http.get(
+          Uri.parse('$_baseUrl/profile'),
+          headers: await _getHeaders()),
+        endpointKey: 'profile',
       );
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
-      } else {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to load profile',
-          response.statusCode,
-        );
-      }
+      return User.fromJson(_handleResponse(response));
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to load profile: ${e.toString()}', 0);
     }
   }
 
-  Future<List<dynamic>> getCompanies() async {
+  Future<List<dynamic>> getCompanies({bool forceRefresh = false}) async {
     try {
-      final headers = await _getHeaders();
+      if (!forceRefresh && _isCacheValid('companies')) {
+        return _responseCache['companies']!['data'] as List<dynamic>;
+      }
+
       final response = await _makeAuthenticatedRequest(
-        () => http.get(
-          Uri.parse('$baseUrl/companies'),
-          headers: headers,
+        () async => http.get(
+          Uri.parse('$_baseUrl/companies'),
+          headers: await _getHeaders(),
         ),
+        endpointKey: 'companies',
       );
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as List;
-      } else {
-        throw ApiException(
-          jsonDecode(response.body)['error'] ?? 'Failed to load companies',
-          response.statusCode,
-        );
-      }
+      final data = _handleResponse(response);
+      _responseCache['companies'] = {
+        'data': data,
+        'cached_at': DateTime.now(),
+      };
+      return data as List<dynamic>;
+    } on ApiException {
+      rethrow;
     } catch (e) {
-      throw ApiException('Network error: $e', 0);
+      throw ApiException('Failed to load companies: ${e.toString()}', 0);
     }
   }
 }
