@@ -35,14 +35,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _initDeepLinks() async {
     try {
-      // Handle initial link if app was terminated
       final initialUri = await _appLinks.getInitialLink();
       if (initialUri != null) _handleDeepLink(initialUri);
-
-      // Listen for links while app is running
       _appLinks.uriLinkStream.listen(_handleDeepLink);
     } catch (e) {
-      debugPrint('Deep linking initialization error: $e');
+      debugPrint('Deep linking error: $e');
     }
   }
 
@@ -55,9 +52,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       if (uri.pathSegments.contains('verify-email')) {
         final token = uri.queryParameters['token'];
-        if (token != null && navigatorKey.currentState?.mounted == true) {
-          await authService.verifyEmail(token);
-          navigatorKey.currentState?.pushReplacementNamed('/rides');
+        if (token != null) {
+          try {
+            await authService.verifyEmail(token);
+
+            // Extra check in case something went wrong
+            if (authService.isEmailVerified &&
+                navigatorKey.currentState?.mounted == true) {
+              navigatorKey.currentState?.pushReplacementNamed('/rides');
+            } else {
+              // Optionally show a snackbar or dialog
+              debugPrint('Email not verified. Showing Verify screen.');
+              navigatorKey.currentState?.pushReplacementNamed('/verify');
+            }
+          } catch (e) {
+            debugPrint('Error during email verification: $e');
+            // Optionally show an error dialog or fallback
+          }
         }
       }
     } catch (e) {
@@ -67,50 +78,81 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthService()),
-      ],
-      child: MaterialApp(
-        title: 'Met Share',
-        navigatorKey: navigatorKey,
-        theme: ThemeData(
-          primarySwatch: Colors.purple,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-          fontFamily: 'Roboto',
-          scaffoldBackgroundColor: Colors.black,
-        ),
-        initialRoute: '/',
-        routes: {
-          '/': (context) => const AuthWrapper(),
-          '/rides': (context) => const RideListScreen(),
-          '/login': (context) => const LoginScreen(),
-          '/register': (context) => const RegisterScreen(),
-          '/verify': (context) => const VerifyScreen(),
-          '/create-ride': (context) => const CreateRideScreen(),
-          '/sos': (context) => const SosScreen(rideId: 'defaultRideId'),
-        },
+    return MaterialApp(
+      title: 'Met Share',
+      navigatorKey: navigatorKey,
+      theme: ThemeData(
+        primarySwatch: Colors.purple,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        fontFamily: 'Roboto',
+        scaffoldBackgroundColor: Colors.black,
       ),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => const AuthWrapper(),
+        '/rides': (context) => const RideListScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/verify': (context) => const VerifyScreen(),
+        '/create-ride': (context) => const CreateRideScreen(),
+        '/sos': (context) => const SosScreen(rideId: 'defaultRideId'),
+      },
     );
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthStatus();
+  }
+
+  Future<void> _checkAuthStatus() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+
+    if (!authService.isInitialized) {
+      await authService.init();
+    }
 
     if (authService.isAuthenticated) {
-      if (authService.email != null && !authService.isEmailVerified) {
-        return const VerifyScreen(email: '', phone: null);
-      }
-      if (authService.phone != null && !authService.isPhoneVerified) {
-        return const VerifyScreen(email: null, phone: '');
-      }
-      return const RideListScreen();
+      await authService.getToken();
     }
-    return const LoginScreen();
+
+    setState(() => _isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final authService = Provider.of<AuthService>(context);
+
+    if (!authService.isAuthenticated) {
+      return const LoginScreen();
+    }
+
+    if (authService.email != null && !authService.isEmailVerified) {
+      return VerifyScreen(email: authService.email, phone: null);
+    }
+
+    if (authService.phone != null && !authService.isPhoneVerified) {
+      return VerifyScreen(email: null, phone: authService.phone);
+    }
+
+    return const RideListScreen();
   }
 }
