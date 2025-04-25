@@ -8,6 +8,7 @@ import '../../models/lat_lng.dart';
 import '../../services/api_service.dart';
 import 'create_ride_screen.dart';
 import 'user_active_rides_screen.dart';
+import '../profile/profile_screen.dart';
 import '../../widgets/ride_card.dart';
 import 'ride_detail_screen.dart';
 import 'dart:async';
@@ -89,7 +90,7 @@ class _RideListScreenState extends State<RideListScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e is ApiException ? e.message : 'Failed to load shared rides'),
-            backgroundColor: Colors.purple[800],
+            backgroundColor: Color(0xFF004F2D),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -456,7 +457,7 @@ class _RideListScreenState extends State<RideListScreen> {
           decoration: BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.purple.withOpacity(0.3)),
+            border: Border.all(color: Color(0xFF004F2D).withOpacity(0.3)),
           ),
           height: 120,
         ),
@@ -476,7 +477,7 @@ class _RideListScreenState extends State<RideListScreen> {
         iconTheme: const IconThemeData(color: Color(0xFF004F2D)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person, color: Color(0xFF004F2D)),
+            icon: const Icon(Icons.local_taxi, color: Color(0xFF004F2D)),
             tooltip: 'My Rides',
             onPressed: () => Navigator.push(
               context,
@@ -484,9 +485,16 @@ class _RideListScreenState extends State<RideListScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.add, color: Color(0xFF004F2D)),
+            icon: const Icon(Icons.add_circle_outline, color: Color(0xFF004F2D)),
             onPressed: _navigateToCreateRide,
             tooltip: 'Create Ride',
+          ),IconButton(
+            icon: const Icon(Icons.settings, color: Color(0xFF004F2D)),
+            tooltip: 'My Profile',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ProfileScreen()),
+            ),
           ),
         ],
       ),
@@ -535,7 +543,7 @@ class _RideListScreenState extends State<RideListScreen> {
                               ? const Padding(
                                   padding: EdgeInsets.all(16.0),
                                   child: Center(child: CircularProgressIndicator(
-                                    color: Colors.purple,
+                                    color: Color(0xFF004F2D),
                                   )),
                                 )
                               : const SizedBox();
