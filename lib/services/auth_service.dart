@@ -59,38 +59,25 @@ class AuthService extends ChangeNotifier {
 
     try {
       _prefs = await SharedPreferences.getInstance();
-      await _lock.synchronized(() async {
-        _token = _prefs?.getString(_tokenKey);
-        _refreshToken = _prefs?.getString(_refreshTokenKey);
-        _userId = _prefs?.getString(_userIdKey);
-        
-        // Handle empty strings from SharedPreferences
-        _email = _prefs?.getString(_emailKey)?.isNotEmpty == true 
-            ? _prefs!.getString(_emailKey) 
-            : null;
-        _phone = _prefs?.getString(_phoneKey)?.isNotEmpty == true
-            ? _prefs!.getString(_phoneKey)
-            : null;
-        _firstName = _prefs?.getString(_firstNameKey)?.isNotEmpty == true
-            ? _prefs!.getString(_firstNameKey)
-            : null;
-        _lastName = _prefs?.getString(_lastNameKey)?.isNotEmpty == true
-            ? _prefs!.getString(_lastNameKey)
-            : null;
+      await _loadPersistedAuthData();
 
-        final expiryString = _prefs?.getString(_tokenExpiryKey);
-        _tokenExpiry = expiryString != null
-            ? DateTime.parse(expiryString).toUtc()
-            : null;
+      // Check if we need to refresh token after loading data
+      if (_token != null && _isTokenExpired && _refreshToken != null) {
+        try {
+          await refreshAuthToken();
+        } catch (e) {
+          debugPrint('[AuthService] Token refresh during init failed: $e');
+          // Don't clear data here - let the app decide if it wants to force logout
+        }
+      }
 
-        _initialized = true;
-        debugPrint('[AuthService] Initialization completed. '
-            'Token exists: ${_token != null}, '
-            'User ID: $_userId');
-        notifyListeners();
-      });
+      _initialized = true;
+      debugPrint('[AuthService] Initialization completed. '
+          'Token exists: ${_token != null}, '
+          'User ID: $_userId');
+      notifyListeners();
     } catch (e) {
-      _initialized = false;
+      _initialized = true; // Mark as initialized to prevent blocking
       debugPrint('[AuthService] Initialization error: $e');
       rethrow;
     }
@@ -190,10 +177,22 @@ class AuthService extends ChangeNotifier {
   Future<void> verifyEmail(String token) async {
     await _safeApiCall(() async {
       await ensureInitialized();
-      final response = await http.get(
-        Uri.parse('$_baseUrl/auth/verify-email?token=$token'),
-      );
-      await _handleAuthResponse(response);
+  
+      try {
+        final response = await http.get(
+          Uri.parse('$_baseUrl/auth/verify-email?token=$token'),
+        );
+  
+        await _handleAuthResponse(response);
+  
+        // ✅ Persist email verified status using SharedPreferences
+        await _prefs?.setBool(_emailVerifiedKey, true);
+  
+        // Optionally notify listeners if something depends on this
+        notifyListeners();
+      } catch (e) {
+        debugPrint('Verification error: $e');
+      }
     });
   }
 
@@ -326,6 +325,19 @@ class AuthService extends ChangeNotifier {
     });
   }
 
+  Future<void> _loadPersistedAuthData() async {
+    _token = _prefs?.getString(_tokenKey);
+    _refreshToken = _prefs?.getString(_refreshTokenKey);
+    _userId = _prefs?.getString(_userIdKey);
+    _email = _prefs?.getString(_emailKey);
+    _phone = _prefs?.getString(_phoneKey);
+    _firstName = _prefs?.getString(_firstNameKey);
+    _lastName = _prefs?.getString(_lastNameKey);
+
+    final expiryString = _prefs?.getString(_tokenExpiryKey);
+    _tokenExpiry = expiryString != null ? DateTime.parse(expiryString).toUtc() : null;
+  }
+
   Future<void> _clearAuthData() async {
     await _lock.synchronized(() async {
       _token = null;
@@ -361,30 +373,28 @@ class AuthService extends ChangeNotifier {
 
   Future<String?> getToken() async {
     if (!_initialized) await init();
-    debugPrint('[AuthService] Token requested. Initialized: $_initialized');
-
+  
     return await _lock.synchronized(() async {
       if (_token == null) {
         debugPrint('[AuthService] No token available');
         return null;
       }
-
+  
+      // Check if token is expired or about to expire
       final bufferExpiry = _tokenExpiry?.subtract(_tokenRefreshBuffer);
       final now = DateTime.now().toUtc();
-      final needsRefresh = bufferExpiry == null || bufferExpiry.isBefore(now);
-
-      if (needsRefresh && _refreshToken != null) {
-        debugPrint('[AuthService] Token needs refresh');
-        if (!_isRefreshing) {
-          await refreshAuthToken();
-        } else {
-          debugPrint('[AuthService] Waiting for existing refresh to complete');
-          while (_isRefreshing) {
-            await Future.delayed(const Duration(milliseconds: 100));
-          }
+      final needsRefresh = _isTokenExpired || 
+                         (bufferExpiry != null && bufferExpiry.isBefore(now));
+  
+      if (needsRefresh && _refreshToken != null && !_isRefreshing) {
+        try {
+          return await refreshAuthToken();
+        } catch (e) {
+          debugPrint('[AuthService] Token refresh failed: $e');
+          return _token; // Return existing token even if refresh failed
         }
       }
-
+  
       return _token;
     });
   }
