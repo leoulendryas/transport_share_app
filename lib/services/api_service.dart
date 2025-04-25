@@ -45,8 +45,8 @@ class ApiService {
       try {
         final token = await authService.getToken();
         if (kDebugMode) {
-  print('Retrieved token: $token');
-}
+          print('Retrieved token: $token');
+        }
 
         if (token != null && token.isNotEmpty) {
           headers['Authorization'] = 'Bearer $token';
@@ -280,6 +280,62 @@ class ApiService {
     }
   }
 
+  Future<User> getUserProfile() async {
+    try {
+      final response = await _makeAuthenticatedRequest(
+        () async => http.get(
+          Uri.parse('$_baseUrl/profile'),
+          headers: await _getHeaders(),
+        ),
+        endpointKey: 'profile',
+      );
+
+      final data = _handleResponse(response);
+      return User.fromJson(data['user']);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException('Failed to load profile: ${e.toString()}', 0);
+    }
+  }
+
+  Future<User> updateUserProfile({
+    String? email,
+    String? password,
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (email != null) body['email'] = email;
+      if (password != null) body['password'] = password;
+      if (firstName != null) body['first_name'] = firstName;
+      if (lastName != null) body['last_name'] = lastName;
+      if (phoneNumber != null) body['phone_number'] = phoneNumber;
+
+      if (body.isEmpty) {
+        throw ApiException('At least one field must be provided for update', 400);
+      }
+
+      final response = await _makeAuthenticatedRequest(
+        () async => http.put(
+          Uri.parse('$_baseUrl/profile'),
+          headers: await _getHeaders(),
+          body: jsonEncode(body),
+        ),
+        endpointKey: 'update_profile',
+      );
+
+      final data = _handleResponse(response);
+      return User.fromJson(data['user']);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException('Failed to update profile: ${e.toString()}', 0);
+    }
+  }
+
   Future<void> joinRide(String rideId) async {
     try {
       await _makeAuthenticatedRequest(
@@ -420,23 +476,6 @@ class ApiService {
       rethrow;
     } catch (e) {
       throw ApiException('Failed to check participation: ${e.toString()}', 0);
-    }
-  }
-
-  Future<User> getUserProfile() async {
-    try {
-      final response = await _makeAuthenticatedRequest(
-        () async => http.get(
-          Uri.parse('$_baseUrl/profile'),
-          headers: await _getHeaders()),
-        endpointKey: 'profile',
-      );
-
-      return User.fromJson(_handleResponse(response));
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException('Failed to load profile: ${e.toString()}', 0);
     }
   }
 
