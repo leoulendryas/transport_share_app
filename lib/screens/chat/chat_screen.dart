@@ -348,7 +348,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Container(
         decoration: BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('icon/chat_bg.png'), // <-- adjust this path
+            image: AssetImage('assets/icon/chat_bg.png'), // <-- adjust this path
             fit: BoxFit.cover, // or BoxFit.repeat for seamless pattern
           ),
         ),
