@@ -8,23 +8,35 @@ import 'services/location_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize services
   final authService = AuthService();
-  await authService.init(); // Await before runApp to ensure user state is ready
-
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider<AuthService>.value(
-          value: authService,
+  final locationService = LocationService();
+  
+  try {
+    // Initialize auth service before running app
+    await authService.init();
+    
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AuthService>.value(value: authService),
+          ProxyProvider<AuthService, ApiService>(
+            update: (context, auth, _) => ApiService(auth),
+          ),
+          Provider<LocationService>.value(value: locationService),
+        ],
+        child: const MyApp(),
+      ),
+    );
+  } catch (e) {
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text('Initialization failed: $e'),
+          ),
         ),
-        ProxyProvider<AuthService, ApiService>(
-          update: (context, auth, _) => ApiService(auth),
-        ),
-        Provider<LocationService>(
-          create: (_) => LocationService(),
-        ),
-      ],
-      child: const MyApp(),
-    ),
-  );
+      ),
+    );
+  }
 }
