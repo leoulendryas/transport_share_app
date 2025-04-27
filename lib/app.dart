@@ -49,30 +49,28 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         navigatorKey.currentContext!,
         listen: false,
       );
-
+  
       if (uri.pathSegments.contains('verify-email')) {
         final token = uri.queryParameters['token'];
         if (token != null) {
           try {
             await authService.verifyEmail(token);
-
-            // Extra check in case something went wrong
-            if (authService.isEmailVerified &&
-                navigatorKey.currentState?.mounted == true) {
-              navigatorKey.currentState?.pushReplacementNamed('/rides');
-            } else {
-              // Optionally show a snackbar or dialog
-              debugPrint('Email not verified. Showing Verify screen.');
-              navigatorKey.currentState?.pushReplacementNamed('/verify');
-            }
           } catch (e) {
             debugPrint('Error during email verification: $e');
-            // Optionally show an error dialog or fallback
+            // Even if there's an error, we still want to proceed
+          } finally {
+            if (navigatorKey.currentState?.mounted == true) {
+              navigatorKey.currentState?.pushReplacementNamed('/rides');
+            }
           }
         }
       }
     } catch (e) {
       debugPrint('Deep link handling error: $e');
+      // If something went wrong before, still try to navigate to /rides
+      if (navigatorKey.currentState?.mounted == true) {
+        navigatorKey.currentState?.pushReplacementNamed('/rides');
+      }
     }
   }
 
