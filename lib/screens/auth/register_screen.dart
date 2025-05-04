@@ -18,13 +18,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _ageController = TextEditingController();
+  String? _selectedGender;
   bool _isLoading = false;
   bool _useEmail = true;
+  bool _termsAccepted = false;
+
+  double get _horizontalPadding => MediaQuery.of(context).size.width * 0.04;
+  double get _verticalSpacing => MediaQuery.of(context).size.height * 0.015;
+  double get _inputFontSize => MediaQuery.of(context).size.shortestSide < 360 ? 14 : 16;
+  double get _titleFontSize => MediaQuery.of(context).size.shortestSide < 360 ? 24 : 28;
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _lastNameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _ageController.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_passwordController.text != _confirmPasswordController.text) {
       _showError('Passwords do not match');
+      return;
+    }
+    if (!_termsAccepted) {
+      _showError('Please accept terms and conditions');
       return;
     }
 
@@ -37,19 +61,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
         email: _useEmail ? _emailController.text.trim() : null,
         phone: !_useEmail ? _phoneController.text.trim() : null,
         password: _passwordController.text.trim(),
+        age: _ageController.text.isNotEmpty ? int.parse(_ageController.text) : null,
+        gender: _selectedGender,
       );
 
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => VerifyScreen(
-              email: _useEmail ? _emailController.text.trim() : null,
-              phone: !_useEmail ? _phoneController.text.trim() : null,
-            ),
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VerifyScreen(
+            email: _useEmail ? _emailController.text.trim() : null,
+            phone: !_useEmail ? _phoneController.text.trim() : null,
           ),
-        );
-      }
+        ),
+      );
     } catch (e) {
       _showError(e.toString());
     } finally {
@@ -58,138 +83,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showError(String message) {
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFF004F2D),
+        backgroundColor: Colors.red[700],
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F9),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Create Account',
-                  style: TextStyle(
-                    fontSize: 28,
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Get started with us',
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 32),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildTextField(
-                        controller: _firstNameController,
-                        label: 'First Name',
-                        icon: Icons.person,
-                        validator: (v) => v!.isEmpty ? 'Required' : null,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildTextField(
-                        controller: _lastNameController,
-                        label: 'Last Name',
-                        icon: Icons.person,
-                        validator: (v) => v!.isEmpty ? 'Required' : null,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                Align(
-                  alignment: Alignment.center,
-                  child: ToggleButtons(
-                    borderRadius: BorderRadius.circular(8),
-                    isSelected: [_useEmail, !_useEmail],
-                    onPressed: (index) {
-                      setState(() => _useEmail = index == 0);
-                    },
-                    color: Colors.black,
-                    selectedColor: Colors.white,
-                    fillColor: const Color(0xFF004F2D),
-                    borderColor: Colors.black,
-                    selectedBorderColor: const Color(0xFF004F2D),
-                    constraints: const BoxConstraints(minHeight: 40, minWidth: 100),
-                    children: const [
-                      Text("Email"),
-                      Text("Phone"),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                _useEmail
-                    ? _buildTextField(
-                        controller: _emailController,
-                        label: 'Email',
-                        icon: Icons.email,
-                        validator: (v) => v!.contains('@') ? null : 'Invalid email',
-                      )
-                    : _buildTextField(
-                        controller: _phoneController,
-                        label: 'Phone Number',
-                        icon: Icons.phone,
-                        keyboardType: TextInputType.phone,
-                        validator: (v) => v!.length < 10 ? 'Invalid phone' : null,
-                      ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _passwordController,
-                  label: 'Password',
-                  icon: Icons.lock,
-                  obscureText: true,
-                  validator: (v) => v!.length < 6 ? 'Min 6 characters' : null,
-                ),
-                const SizedBox(height: 16),
-                _buildTextField(
-                  controller: _confirmPasswordController,
-                  label: 'Confirm Password',
-                  icon: Icons.lock,
-                  obscureText: true,
-                  validator: (v) => v != _passwordController.text ? 'Mismatch' : null,
-                ),
-                const SizedBox(height: 24),
-                _buildRegisterButton(),
-                const SizedBox(height: 24),
-                _buildLoginPrompt(),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -204,57 +103,132 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: Colors.black),
       obscureText: obscureText,
       keyboardType: keyboardType,
       validator: validator,
+      style: TextStyle(fontSize: _inputFontSize),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.black54),
-        prefixIcon: Icon(icon, color: const Color(0xFF004F2D)),
+        labelStyle: TextStyle(fontSize: _inputFontSize),
+        prefixIcon: Icon(icon, size: 20, color: const Color(0xFF004F2D)),
         filled: true,
         fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: Colors.grey.shade400),
-          borderRadius: BorderRadius.circular(12),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
         ),
       ),
     );
   }
 
-  Widget _buildRegisterButton() {
-    return ElevatedButton(
-      onPressed: _isLoading ? null : _submit,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.black,
-        minimumSize: const Size(double.infinity, 50),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 4,
-      ).copyWith(
-        overlayColor: MaterialStateProperty.all(const Color(0xFF004F2D)),
-      ),
-      child: _isLoading
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            )
-          : const Text('Sign Up', style: TextStyle(color: Colors.white)),
-    );
-  }
-
-  Widget _buildLoginPrompt() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Text("Already have an account?", style: TextStyle(color: Colors.grey)),
-        TextButton(
-          onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-          child: const Text('Login', style: TextStyle(color: Color(0xFF004F2D))),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F9F9),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: _horizontalPadding),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    SizedBox(height: constraints.maxHeight * 0.02),
+                    Text('Create Account', style: TextStyle(fontSize: _titleFontSize, fontWeight: FontWeight.bold, color: Colors.black)),
+                    SizedBox(height: _verticalSpacing),
+                    Row(children: [
+                      Expanded(child: _buildTextField(controller: _firstNameController, label: 'First Name*', icon: Icons.person_outline, validator: (v) => v!.isEmpty ? 'Required' : null)),
+                      SizedBox(width: constraints.maxWidth * 0.03),
+                      Expanded(child: _buildTextField(controller: _lastNameController, label: 'Last Name*', icon: Icons.person_outline, validator: (v) => v!.isEmpty ? 'Required' : null)),
+                    ]),
+                    SizedBox(height: _verticalSpacing),
+                    Row(children: [
+                      Expanded(flex: 3, child: _buildTextField(controller: _ageController, label: 'Age', icon: Icons.cake_outlined, keyboardType: TextInputType.number, validator: (v) => v!.isNotEmpty && int.tryParse(v) == null ? 'Invalid age' : null)),
+                      SizedBox(width: constraints.maxWidth * 0.03),
+                      Expanded(flex: 4, child: DropdownButtonFormField<String>(
+                        value: _selectedGender,
+                        decoration: InputDecoration(
+                          labelText: 'Gender',
+                          labelStyle: TextStyle(fontSize: _inputFontSize),
+                          prefixIcon: const Icon(Icons.transgender, color: Color(0xFF004F2D)),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'male', child: Text('Male')),
+                          DropdownMenuItem(value: 'female', child: Text('Female')),
+                        ],
+                        onChanged: (value) => setState(() => _selectedGender = value),
+                        style: TextStyle(fontSize: _inputFontSize, color: Colors.black, ),
+                      ))
+                    ]),
+                    SizedBox(height: _verticalSpacing * 1.5),
+                    ToggleButtons(
+                      constraints: const BoxConstraints(minHeight: 36),
+                      borderRadius: BorderRadius.circular(8),
+                      isSelected: [_useEmail, !_useEmail],
+                      onPressed: (index) => setState(() => _useEmail = index == 0),
+                      selectedColor: Colors.white,
+                      fillColor: const Color(0xFF004F2D),
+                      color: Colors.black54,
+                      children: [
+                        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('Email', style: TextStyle(fontSize: _inputFontSize))),
+                        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('Phone', style: TextStyle(fontSize: _inputFontSize)))
+                      ],
+                    ),
+                    SizedBox(height: _verticalSpacing),
+                    _useEmail
+                      ? _buildTextField(controller: _emailController, label: 'Email*', icon: Icons.email_outlined, validator: (v) => v!.contains('@') ? null : 'Invalid email')
+                      : _buildTextField(controller: _phoneController, label: 'Phone*', icon: Icons.phone_android_outlined, keyboardType: TextInputType.phone, validator: (v) => v!.length < 10 ? 'Invalid phone' : null),
+                    SizedBox(height: _verticalSpacing),
+                    _buildTextField(controller: _passwordController, label: 'Password*', icon: Icons.lock_outlined, obscureText: true, validator: (v) => v!.length < 6 ? 'Min 6 characters' : null),
+                    SizedBox(height: _verticalSpacing),
+                    _buildTextField(controller: _confirmPasswordController, label: 'Confirm Password*', icon: Icons.lock_outlined, obscureText: true, validator: (v) => v != _passwordController.text ? 'Mismatch' : null),
+                    SizedBox(height: _verticalSpacing),
+                    Row(children: [
+                      Checkbox(
+                        value: _termsAccepted,
+                        activeColor: const Color(0xFF004F2D),
+                        onChanged: (v) => setState(() => _termsAccepted = v!),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => print('Show terms'),
+                          child: Text('I agree to terms and conditions', style: TextStyle(fontSize: _inputFontSize * 0.9, color: const Color(0xFF004F2D))),
+                        ),
+                      )
+                    ]),
+                    SizedBox(height: constraints.maxHeight * 0.03),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF004F2D),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                          : Text('Create Account', style: TextStyle(fontSize: _inputFontSize + 2, fontWeight: FontWeight.w500, color: Colors.white))
+                      )
+                    ),
+                    SizedBox(height: constraints.maxHeight * 0.02),
+                    TextButton(
+                      onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                      child: Text('Already have an account? Login', style: TextStyle(fontSize: _inputFontSize, color: const Color(0xFF004F2D)))
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
-      ],
+      ),
     );
   }
 }
