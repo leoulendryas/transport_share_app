@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 
+enum AuthMode { email, phonePassword, phoneOtp }
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -17,16 +19,17 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   final _otpController = TextEditingController();
 
   bool _isLoading = false;
-  bool _useEmail = true;
-  bool _useOtp = false;
-
+  AuthMode _authMode = AuthMode.email;
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
     _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
     _controller.forward();
   }
@@ -46,45 +49,116 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     setState(() => _isLoading = true);
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      if (_useOtp) {
-        await authService.login(phone: _phoneController.text.trim(), otp: _otpController.text.trim());
+      switch (_authMode) {
+        case AuthMode.email:
+          await authService.login(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+          break;
+        case AuthMode.phonePassword:
+          await authService.login(
+            phone: _phoneController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+          break;
+        case AuthMode.phoneOtp:
+          await authService.login(
+            phone: _phoneController.text.trim(),
+            otp: _otpController.text.trim(),
+          );
+          break;
+      }
+
+      if (!mounted) return;
+
+      if (authService.isIdVerified) {
+        Navigator.pushNamedAndRemoveUntil(context, '/rides', (_) => false);
       } else {
-        await authService.login(
-          email: _useEmail ? _emailController.text.trim() : null,
-          phone: !_useEmail ? _phoneController.text.trim() : null,
-          password: _passwordController.text.trim(),
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          authService.isVerified ? '/profile-complete' : '/verify',
+          (_) => false,
         );
       }
-      if (mounted) Navigator.of(context).pushReplacementNamed('/rides');
     } catch (e) {
-      _showMessage(e.toString(), isError: true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Login failed: $e")),
+      );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _requestOtp() async {
-    if (_phoneController.text.trim().isEmpty) return;
-    setState(() => _isLoading = true);
-    try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      await authService.requestOtp(_phoneController.text.trim());
-      _showMessage('OTP sent to your phone.');
-    } catch (e) {
-      _showMessage(e.toString(), isError: true);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+  Widget _buildAuthFields() {
+    switch (_authMode) {
+      case AuthMode.email:
+        return Column(
+          children: [
+            TextFormField(
+              controller: _emailController,
+              decoration: const InputDecoration(labelText: 'Email'),
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) => value!.isEmpty ? 'Enter email' : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _passwordController,
+              decoration: const InputDecoration(labelText: 'Password'),
+              obscureText: true,
+              validator: (value) => value!.isEmpty ? 'Enter password' : null,
+            ),
+          ],
+        );
+      case AuthMode.phonePassword:
+        return Column(
+          children: [
+            TextFormField(
+              controller: _phoneController,
+              decoration: const InputDecoration(labelText: 'Phone Number'),
+              keyboardType: TextInputType.phone,
+              validator: (value) => value!.isEmpty ? 'Enter phone number' : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _passwordController,
+              decoration: const InputDecoration(labelText: 'Password'),
+              obscureText: true,
+              validator: (value) => value!.isEmpty ? 'Enter password' : null,
+            ),
+          ],
+        );
+      case AuthMode.phoneOtp:
+        return Column(
+          children: [
+            TextFormField(
+              controller: _phoneController,
+              decoration: const InputDecoration(labelText: 'Phone Number'),
+              keyboardType: TextInputType.phone,
+              validator: (value) => value!.isEmpty ? 'Enter phone number' : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _otpController,
+              decoration: const InputDecoration(labelText: 'OTP'),
+              keyboardType: TextInputType.number,
+              validator: (value) => value!.isEmpty ? 'Enter OTP' : null,
+            ),
+          ],
+        );
     }
   }
 
-  void _showMessage(String message, {bool isError = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red[700] : Colors.green[700],
-        behavior: SnackBarBehavior.floating,
-      ),
+  Widget _buildAuthModeSwitch() {
+    return DropdownButton<AuthMode>(
+      value: _authMode,
+      onChanged: (mode) => setState(() => _authMode = mode!),
+      items: AuthMode.values.map((mode) {
+        return DropdownMenuItem(
+          value: mode,
+          child: Text(mode.toString().split('.').last),
+        );
+      }).toList(),
     );
   }
 
@@ -93,160 +167,51 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9F9),
       body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          child: Form(
-            key: _formKey,
-            child: FadeTransition(
-              opacity: _fadeAnimation,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 60),
+            child: Form(
+              key: _formKey,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'Welcome Back',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black),
+                    'Login',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Sign in to continue',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.black87),
+                  const SizedBox(height: 20),
+                  _buildAuthModeSwitch(),
+                  const SizedBox(height: 20),
+                  _buildAuthFields(),
+                  const SizedBox(height: 30),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+                    ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator()
+                        : const Text('Login'),
                   ),
-                  const SizedBox(height: 32),
-
-                  _buildToggle(),
-                  const SizedBox(height: 24),
-
-                  _useEmail
-                      ? _buildTextField(controller: _emailController, label: 'Email', icon: Icons.email, validator: (v) => v!.contains('@') ? null : 'Invalid email')
-                      : _buildTextField(controller: _phoneController, label: 'Phone Number', icon: Icons.phone, keyboardType: TextInputType.phone, validator: (v) => v!.length < 10 ? 'Invalid phone number' : null),
-
-                  const SizedBox(height: 16),
-
-                  if (!_useEmail && !_useOtp)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => setState(() => _useOtp = true),
-                        child: const Text('Use OTP instead?', style: TextStyle(color: Color(0xFF004F2D))),
-                      ),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => Navigator.pushNamed(context, '/register'),
+                    child: const Text(
+                      "Don't have an account? Register",
+                      style: TextStyle(color: Color(0xFF004F2D)),
                     ),
-
-                  if (!_useOtp)
-                    _buildTextField(
-                      controller: _passwordController,
-                      label: 'Password',
-                      icon: Icons.lock,
-                      obscureText: true,
-                      validator: (v) => v!.length < 6 ? 'Min 6 characters' : null,
-                    ),
-
-                  if (_useOtp)
-                    _buildTextField(
-                      controller: _otpController,
-                      label: 'OTP Code',
-                      icon: Icons.sms,
-                      keyboardType: TextInputType.number,
-                      validator: (v) => v!.length == 6 ? null : 'Enter 6-digit code',
-                      suffix: TextButton(
-                        onPressed: _requestOtp,
-                        child: const Text('Send OTP', style: TextStyle(color: Color(0xFF004F2D))),
-                      ),
-                    ),
-
-                  const SizedBox(height: 24),
-                  _buildLoginButton(),
-                  const SizedBox(height: 16),
-                  _buildSignUpPrompt(),
+                  ),
                 ],
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildToggle() {
-    return Center(
-      child: ToggleButtons(
-        isSelected: [_useEmail, !_useEmail],
-        onPressed: (index) {
-          setState(() {
-            _useEmail = index == 0;
-            _useOtp = false;
-            _controller.forward(from: 0);
-          });
-        },
-        borderRadius: BorderRadius.circular(12),
-        fillColor: const Color(0xFF004F2D),
-        selectedColor: Colors.white,
-        color: Colors.black,
-        constraints: const BoxConstraints(minHeight: 40, minWidth: 100),
-        children: const [Text("Email"), Text("Phone")],
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool obscureText = false,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-    Widget? suffix,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      validator: validator,
-      style: const TextStyle(color: Colors.black),
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF004F2D)),
-        suffix: suffix,
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        focusedBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: Color(0xFF004F2D), width: 2),
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLoginButton() {
-    return ElevatedButton(
-      onPressed: _isLoading ? null : _submit,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        minimumSize: const Size(double.infinity, 50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 4,
-      ).copyWith(
-        overlayColor: WidgetStateProperty.all(const Color(0xFF004F2D)),
-      ),
-      child: _isLoading
-          ? const CircularProgressIndicator(color: Colors.white)
-          : Text(_useOtp ? 'Verify OTP' : 'Sign In'),
-    );
-  }
-
-  Widget _buildSignUpPrompt() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Text("Don't have an account?", style: TextStyle(color: Colors.black87)),
-        TextButton(
-          onPressed: () => Navigator.pushNamed(context, '/register'),
-          child: const Text('Sign Up', style: TextStyle(color: Color(0xFF004F2D))),
-        ),
-      ],
     );
   }
 }
