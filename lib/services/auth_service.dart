@@ -142,6 +142,17 @@ class AuthService extends ChangeNotifier {
     });
   }
 
+  Future<void> verifyPhone({required String phone, required String otp}) async {
+    await _safeApiCall(() async {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/auth/verify-phone'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'phone_number': phone, 'otp': otp}),
+      );
+      await _handleAuthResponse(res);
+    });
+  }
+
   Future<void> verifyEmail(String token) async {
     await _safeApiCall(() async {
       final res = await http.get(Uri.parse('$_baseUrl/auth/verify-email?token=$token'));
