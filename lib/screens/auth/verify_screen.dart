@@ -32,14 +32,13 @@ class _VerifyScreenState extends State<VerifyScreen> {
 
     setState(() => _isLoading = true);
     try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      
       if (_isEmailVerification) {
-        await Provider.of<AuthService>(context, listen: false).login(
-          email: widget.email,
-          password: null, // Trigger email verification check
-        );
+        await authService.verifyEmail(widget.email!);
       } else {
-        await Provider.of<AuthService>(context, listen: false).login(
-          phone: widget.phone,
+        await authService.verifyPhone(
+          phone: widget.phone!,
           otp: _otpController.text,
         );
       }
@@ -60,14 +59,13 @@ class _VerifyScreenState extends State<VerifyScreen> {
 
   Future<void> _resendVerification() async {
     try {
+      final authService = Provider.of<AuthService>(context, listen: false);
       if (_isEmailVerification) {
-        await Provider.of<AuthService>(context, listen: false)
-            .resendVerificationEmail(widget.email!);
+        await authService.resendVerificationEmail(widget.email!);
       } else {
-        await Provider.of<AuthService>(context, listen: false)
-            .requestOtp(widget.phone!);
+        await authService.requestOtp(widget.phone!);
       }
-      _showSuccess('Verification code resent successfully');
+      _showSuccess('New verification code sent successfully');
     } catch (e) {
       _showError(e.toString());
     }
@@ -112,14 +110,18 @@ class _VerifyScreenState extends State<VerifyScreen> {
       style: TextStyle(fontSize: _inputFontSize),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(fontSize: _inputFontSize),
+        labelStyle: TextStyle(fontSize: _inputFontSize, color: Colors.black54),
         prefixIcon: Icon(icon, size: 20, color: const Color(0xFF004F2D)),
         filled: true,
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: Color(0xFF004F2D)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFF004F2D)),
         ),
       ),
     );
@@ -128,7 +130,7 @@ class _VerifyScreenState extends State<VerifyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9F9),
+      backgroundColor: const Color(0xFFF7F9F9),  // Updated background color
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -136,73 +138,72 @@ class _VerifyScreenState extends State<VerifyScreen> {
               padding: EdgeInsets.symmetric(horizontal: _horizontalPadding),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 400),
+                  constraints: const BoxConstraints(maxWidth: 400),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      SizedBox(height: constraints.maxHeight * 0.02),
+                      SizedBox(height: constraints.maxHeight * 0.1),
                       Text(
                         'Verify Account',
                         style: TextStyle(
                           fontSize: _titleFontSize,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
+                          color: const Color(0xFF004F2D)),  // Title color
                       ),
                       SizedBox(height: _verticalSpacing * 2),
                       Icon(
                         Icons.verified_outlined,
                         size: 80,
-                        color: const Color(0xFF004F2D),
-                      ),
+                        color: const Color(0xFF004F2D)),  // Icon color
                       SizedBox(height: _verticalSpacing * 2),
                       Text(
                         _isEmailVerification
-                            ? 'We sent a verification link to\n${widget.email}'
-                            : 'Enter OTP sent to\n${widget.phone}',
+                            ? 'Check your email ${widget.email} for verification link'
+                            : 'Enter 6-digit OTP sent to ${widget.phone}',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: _inputFontSize + 2,
                           height: 1.5,
-                        ),
+                          color: Colors.black87),
                       ),
                       if (!_isEmailVerification) ...[
-                        SizedBox(height: _verticalSpacing * 2),
+                        SizedBox(height: _verticalSpacing * 3),
                         _buildTextField(
                           controller: _otpController,
                           label: 'OTP Code',
                           icon: Icons.sms_outlined,
                           keyboardType: TextInputType.number,
                         ),
-                        SizedBox(height: _verticalSpacing * 2),
+                        SizedBox(height: _verticalSpacing * 3),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _verify,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF004F2D),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              backgroundColor: Colors.black,
+                              foregroundColor: const Color(0xFF004F2D),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
+                                side: const BorderSide(color: Color(0xFF004F2D)),
                               ),
                             ),
                             child: _isLoading
                                 ? const CircularProgressIndicator(
-                                    color: Colors.white,
+                                    color: Color(0xFF004F2D),
                                     strokeWidth: 2,
                                   )
                                 : Text(
                                     'Verify OTP',
                                     style: TextStyle(
                                       fontSize: _inputFontSize + 2,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                           ),
                         ),
                       ],
-                      SizedBox(height: _verticalSpacing * 2),
+                      SizedBox(height: _verticalSpacing * 3),
                       TextButton(
                         onPressed: _resendVerification,
                         child: Text(
@@ -220,10 +221,11 @@ class _VerifyScreenState extends State<VerifyScreen> {
                       TextButton(
                         onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
                         child: Text(
-                          'Back to Login',
+                          'Return to Login',
                           style: TextStyle(
                             fontSize: _inputFontSize,
                             color: const Color(0xFF004F2D),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
