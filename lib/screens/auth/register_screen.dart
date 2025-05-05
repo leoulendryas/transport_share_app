@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 import 'verify_screen.dart';
@@ -89,8 +90,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: Colors.red[700],
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    ));
   }
 
   Widget _buildTextField({
@@ -100,12 +100,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     bool obscureText = false,
     TextInputType? keyboardType,
     String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
       validator: validator,
+      inputFormatters: inputFormatters,
       style: TextStyle(fontSize: _inputFontSize),
       decoration: InputDecoration(
         labelText: label,
@@ -136,58 +138,149 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: Column(
                   children: [
                     SizedBox(height: constraints.maxHeight * 0.02),
-                    Text('Create Account', style: TextStyle(fontSize: _titleFontSize, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('Create Account', 
+                      style: TextStyle(
+                        fontSize: _titleFontSize, 
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black
+                      )),
                     SizedBox(height: _verticalSpacing),
                     Row(children: [
-                      Expanded(child: _buildTextField(controller: _firstNameController, label: 'First Name*', icon: Icons.person_outline, validator: (v) => v!.isEmpty ? 'Required' : null)),
+                      Expanded(
+                        child: _buildTextField(
+                          controller: _firstNameController,
+                          label: 'First Name*',
+                          icon: Icons.person_outline,
+                          validator: (v) => v!.isEmpty ? 'Required' : null
+                        )),
                       SizedBox(width: constraints.maxWidth * 0.03),
-                      Expanded(child: _buildTextField(controller: _lastNameController, label: 'Last Name*', icon: Icons.person_outline, validator: (v) => v!.isEmpty ? 'Required' : null)),
+                      Expanded(
+                        child: _buildTextField(
+                          controller: _lastNameController,
+                          label: 'Last Name*',
+                          icon: Icons.person_outline,
+                          validator: (v) => v!.isEmpty ? 'Required' : null
+                        )),
                     ]),
                     SizedBox(height: _verticalSpacing),
                     Row(children: [
-                      Expanded(flex: 3, child: _buildTextField(controller: _ageController, label: 'Age', icon: Icons.cake_outlined, keyboardType: TextInputType.number, validator: (v) => v!.isNotEmpty && int.tryParse(v) == null ? 'Invalid age' : null)),
+                      Expanded(
+                        flex: 3,
+                        child: _buildTextField(
+                          controller: _ageController,
+                          label: 'Age',
+                          icon: Icons.cake_outlined,
+                          keyboardType: TextInputType.number,
+                          validator: (v) => v!.isNotEmpty && int.tryParse(v) == null 
+                            ? 'Invalid age' : null
+                        )),
                       SizedBox(width: constraints.maxWidth * 0.03),
-                      Expanded(flex: 4, child: DropdownButtonFormField<String>(
-                        value: _selectedGender,
-                        decoration: InputDecoration(
-                          labelText: 'Gender',
-                          labelStyle: TextStyle(fontSize: _inputFontSize),
-                          prefixIcon: const Icon(Icons.transgender, color: Color(0xFF004F2D)),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'male', child: Text('Male')),
-                          DropdownMenuItem(value: 'female', child: Text('Female')),
-                        ],
-                        onChanged: (value) => setState(() => _selectedGender = value),
-                        style: TextStyle(fontSize: _inputFontSize, color: Colors.black, ),
-                      ))
+                      Expanded(
+                        flex: 4,
+                        child: DropdownButtonFormField<String>(
+                          value: _selectedGender,
+                          decoration: InputDecoration(
+                            labelText: 'Gender',
+                            labelStyle: TextStyle(fontSize: _inputFontSize),
+                            prefixIcon: const Icon(Icons.transgender, color: Color(0xFF004F2D)),
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'male', child: Text('Male')),
+                            DropdownMenuItem(value: 'female', child: Text('Female')),
+                          ],
+                          onChanged: (value) => setState(() => _selectedGender = value),
+                          style: TextStyle(fontSize: _inputFontSize, color: Colors.black),
+                        ))
                     ]),
                     SizedBox(height: _verticalSpacing * 1.5),
-                    ToggleButtons(
-                      constraints: const BoxConstraints(minHeight: 36),
-                      borderRadius: BorderRadius.circular(8),
-                      isSelected: [_useEmail, !_useEmail],
-                      onPressed: (index) => setState(() => _useEmail = index == 0),
-                      selectedColor: Colors.white,
-                      fillColor: const Color(0xFF004F2D),
-                      color: Colors.black54,
-                      children: [
-                        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('Email', style: TextStyle(fontSize: _inputFontSize))),
-                        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('Phone', style: TextStyle(fontSize: _inputFontSize)))
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Text('Register using:', 
+                        style: TextStyle(
+                          fontSize: _inputFontSize,
+                          color: Colors.grey[600],
+                        )),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF004F2D), width: 1.5),
+                      ),
+                      child: ToggleButtons(
+                        borderRadius: BorderRadius.circular(10),
+                        constraints: const BoxConstraints(minHeight: 40, minWidth: 100),
+                        isSelected: [_useEmail, !_useEmail],
+                        onPressed: (index) => setState(() => _useEmail = index == 0),
+                        selectedColor: Colors.white,
+                        fillColor: const Color(0xFF004F2D),
+                        color: Colors.black87,
+                        textStyle: TextStyle(
+                          fontSize: _inputFontSize,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        renderBorder: false,
+                        children: const [
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Text('Email'),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Text('Phone'),
+                          ),
+                        ],
+                      ),
                     ),
                     SizedBox(height: _verticalSpacing),
                     _useEmail
-                      ? _buildTextField(controller: _emailController, label: 'Email*', icon: Icons.email_outlined, validator: (v) => v!.contains('@') ? null : 'Invalid email')
-                      : _buildTextField(controller: _phoneController, label: 'Phone*', icon: Icons.phone_android_outlined, keyboardType: TextInputType.phone, validator: (v) => v!.length < 10 ? 'Invalid phone' : null),
+                      ? _buildTextField(
+                          controller: _emailController,
+                          label: 'Email*',
+                          icon: Icons.email_outlined,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Required';
+                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v)) {
+                              return 'Invalid email';
+                            }
+                            return null;
+                          },
+                        )
+                      : _buildTextField(
+                          controller: _phoneController,
+                          label: 'Phone*',
+                          icon: Icons.phone_android_outlined,
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Required';
+                            if (v.length < 10) return 'Enter 10+ digits';
+                            return null;
+                          },
+                        ),
                     SizedBox(height: _verticalSpacing),
-                    _buildTextField(controller: _passwordController, label: 'Password*', icon: Icons.lock_outlined, obscureText: true, validator: (v) => v!.length < 6 ? 'Min 6 characters' : null),
+                    _buildTextField(
+                      controller: _passwordController,
+                      label: 'Password*',
+                      icon: Icons.lock_outlined,
+                      obscureText: true,
+                      validator: (v) => v!.length < 6 ? 'Min 6 characters' : null
+                    ),
                     SizedBox(height: _verticalSpacing),
-                    _buildTextField(controller: _confirmPasswordController, label: 'Confirm Password*', icon: Icons.lock_outlined, obscureText: true, validator: (v) => v != _passwordController.text ? 'Mismatch' : null),
+                    _buildTextField(
+                      controller: _confirmPasswordController,
+                      label: 'Confirm Password*',
+                      icon: Icons.lock_outlined,
+                      obscureText: true,
+                      validator: (v) => v != _passwordController.text ? 'Mismatch' : null
+                    ),
                     SizedBox(height: _verticalSpacing),
                     Row(children: [
                       Checkbox(
@@ -198,7 +291,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Expanded(
                         child: GestureDetector(
                           onTap: () => print('Show terms'),
-                          child: Text('I agree to terms and conditions', style: TextStyle(fontSize: _inputFontSize * 0.9, color: const Color(0xFF004F2D))),
+                          child: Text('I agree to terms and conditions', 
+                            style: TextStyle(
+                              fontSize: _inputFontSize * 0.9, 
+                              color: const Color(0xFF004F2D))),
                         ),
                       )
                     ]),
@@ -210,17 +306,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF004F2D),
                           padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
                         ),
                         child: _isLoading
-                          ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                          : Text('Create Account', style: TextStyle(fontSize: _inputFontSize + 2, fontWeight: FontWeight.w500, color: Colors.white))
+                          ? const CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2)
+                          : Text('Create Account', 
+                              style: TextStyle(
+                                fontSize: _inputFontSize + 2,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white))
                       )
                     ),
                     SizedBox(height: constraints.maxHeight * 0.02),
                     TextButton(
                       onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-                      child: Text('Already have an account? Login', style: TextStyle(fontSize: _inputFontSize, color: const Color(0xFF004F2D)))
+                      child: Text('Already have an account? Login', 
+                        style: TextStyle(
+                          fontSize: _inputFontSize,
+                          color: const Color(0xFF004F2D)))
                     ),
                   ],
                 ),
