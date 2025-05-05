@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../services/auth_service.dart';
 
-enum AuthMode { email, phonePassword, phoneOtp }
+enum AuthMode { email, phonePassword }
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,7 +16,6 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _otpController = TextEditingController();
 
   bool _isLoading = false;
   AuthMode _authMode = AuthMode.email;
@@ -40,7 +39,6 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
-    _otpController.dispose();
     super.dispose();
   }
 
@@ -49,25 +47,16 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     setState(() => _isLoading = true);
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      switch (_authMode) {
-        case AuthMode.email:
-          await authService.login(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
-          break;
-        case AuthMode.phonePassword:
-          await authService.login(
-            phone: _phoneController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
-          break;
-        case AuthMode.phoneOtp:
-          await authService.login(
-            phone: _phoneController.text.trim(),
-            otp: _otpController.text.trim(),
-          );
-          break;
+      if (_authMode == AuthMode.email) {
+        await authService.login(
+          email: _emailController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
+      } else {
+        await authService.login(
+          phone: _phoneController.text.trim(),
+          password: _passwordController.text.trim(),
+        );
       }
 
       if (!mounted) return;
@@ -91,75 +80,74 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   Widget _buildAuthFields() {
-    switch (_authMode) {
-      case AuthMode.email:
-        return Column(
-          children: [
-            TextFormField(
-              controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-              validator: (value) => value!.isEmpty ? 'Enter email' : null,
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-              validator: (value) => value!.isEmpty ? 'Enter password' : null,
-            ),
-          ],
-        );
-      case AuthMode.phonePassword:
-        return Column(
-          children: [
-            TextFormField(
-              controller: _phoneController,
-              decoration: const InputDecoration(labelText: 'Phone Number'),
-              keyboardType: TextInputType.phone,
-              validator: (value) => value!.isEmpty ? 'Enter phone number' : null,
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-              validator: (value) => value!.isEmpty ? 'Enter password' : null,
-            ),
-          ],
-        );
-      case AuthMode.phoneOtp:
-        return Column(
-          children: [
-            TextFormField(
-              controller: _phoneController,
-              decoration: const InputDecoration(labelText: 'Phone Number'),
-              keyboardType: TextInputType.phone,
-              validator: (value) => value!.isEmpty ? 'Enter phone number' : null,
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _otpController,
-              decoration: const InputDecoration(labelText: 'OTP'),
-              keyboardType: TextInputType.number,
-              validator: (value) => value!.isEmpty ? 'Enter OTP' : null,
-            ),
-          ],
-        );
-    }
+    return Column(
+      children: [
+        if (_authMode == AuthMode.email)
+          TextFormField(
+            controller: _emailController,
+            decoration: const InputDecoration(labelText: 'Email'),
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) => value!.isEmpty ? 'Enter email' : null,
+          )
+        else
+          TextFormField(
+            controller: _phoneController,
+            decoration: const InputDecoration(labelText: 'Phone Number'),
+            keyboardType: TextInputType.phone,
+            validator: (value) => value!.isEmpty ? 'Enter phone number' : null,
+          ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: _passwordController,
+          decoration: const InputDecoration(labelText: 'Password'),
+          obscureText: true,
+          validator: (value) => value!.isEmpty ? 'Enter password' : null,
+        ),
+      ],
+    );
   }
 
-  Widget _buildAuthModeSwitch() {
-    return DropdownButton<AuthMode>(
-      value: _authMode,
-      onChanged: (mode) => setState(() => _authMode = mode!),
-      items: AuthMode.values.map((mode) {
-        return DropdownMenuItem(
-          value: mode,
-          child: Text(mode.toString().split('.').last),
-        );
-      }).toList(),
+  Widget _buildAuthToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF847979).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: AuthMode.values.map((mode) {
+          final isSelected = _authMode == mode;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _authMode = mode),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF004F2D) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  _authModeLabel(mode),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : Colors.black,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
+  }
+
+  String _authModeLabel(AuthMode mode) {
+    switch (mode) {
+      case AuthMode.email:
+        return 'Email';
+      case AuthMode.phonePassword:
+        return 'Phone Number';
+    }
   }
 
   @override
@@ -177,13 +165,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 children: [
                   const Text(
                     'Login',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 20),
-                  _buildAuthModeSwitch(),
+                  _buildAuthToggle(),
                   const SizedBox(height: 20),
                   _buildAuthFields(),
                   const SizedBox(height: 30),
