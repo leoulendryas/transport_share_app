@@ -116,8 +116,6 @@ class AuthService extends ChangeNotifier {
     String? email,
     String? phone,
     required String password,
-    int? age,
-    String? gender,
   }) async {
     await _safeApiCall(() async {
       final res = await http.post(
@@ -129,8 +127,6 @@ class AuthService extends ChangeNotifier {
           if (email != null) 'email': email,
           if (phone != null) 'phone_number': phone,
           'password': password,
-          'age': age,
-          'gender': gender,
         }),
       );
       final data = _parseResponse(res);
@@ -172,18 +168,19 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> requestOtp(String phone) async {
-    await _safeApiCall(() async {
-      final res = await http.post(
-        Uri.parse('$_baseUrl/auth/request-otp'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'phone_number': phone}),
-      );
-      _parseResponse(res);
-    });
-  }
+      await _safeApiCall(() async {
+        final res = await http.post(
+          Uri.parse('$_baseUrl/auth/request-otp'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'phone_number': phone}),
+        );
+        _parseResponse(res);
+      });
+    }
 
-  Future<void> verifyIdentity({
-    required String name,
+    Future<void> verifyIdentity({
+    required String firstName,
+    required String lastName,
     required int age,
     required String gender,
     required String idType,
@@ -195,32 +192,55 @@ class AuthService extends ChangeNotifier {
 
     for (var attempt = 1; attempt <= retryCount; attempt++) {
       try {
-        final req = http.MultipartRequest('POST', Uri.parse('$_baseUrl/auth/verify-identity'))
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse('$_baseUrl/auth/verify-identity'),
+        )
           ..headers['Authorization'] = 'Bearer $_token'
           ..fields.addAll({
-            'name': name,
+            'first_name': firstName,
+            'last_name': lastName,
             'age': age.toString(),
             'gender': gender,
             'id_type': idType,
           })
-          ..files.add(await http.MultipartFile.fromPath('id_image', imagePath, contentType: MediaType('image', 'jpeg')));
+          ..files.add(
+            await http.MultipartFile.fromPath(
+              'id_image',
+              imagePath,
+              contentType: MediaType('image', 'jpeg'),
+            ),
+          );
 
-        final response = await req.send();
+        final response = await request.send();
         final responseBody = await response.stream.bytesToString();
+
         if (response.statusCode >= 200 && response.statusCode < 300) {
-          await _handleAuthResponse(http.Response(responseBody, response.statusCode));
-          break;
-        } else if (attempt == retryCount) {
-          throw AppException('Verification failed after $retryCount attempts');
+          final decoded = jsonDecode(responseBody);
+          debugPrint('Verification success: $decoded');
+
+          _prefs?.setBool(_keys['idVerified']!, true);
+          _isVerifying = false;
+          notifyListeners();
+          return;
+        } else {
+          debugPrint('Attempt $attempt failed with status ${response.statusCode}: $responseBody');
+          if (attempt == retryCount) {
+            throw AppException('Verification failed after $retryCount attempts');
+          }
         }
         await Future.delayed(Duration(seconds: attempt * 2));
-      } catch (_) {
-        if (attempt == retryCount) rethrow;
+      } catch (e) {
+        debugPrint('Attempt $attempt threw an error: $e');
+        if (attempt == retryCount) {
+          _isVerifying = false;
+          notifyListeners();
+          rethrow;
+        }
       }
     }
 
     _isVerifying = false;
-    _prefs?.setBool(_keys['idVerified']!, true);
     notifyListeners();
   }
 
@@ -258,6 +278,7 @@ class AuthService extends ChangeNotifier {
 
   Future<String?> getToken() async {
     await ensureInitialized();
+    _loadPersistedData(); // Ensure latest token from SharedPreferences
     if (_isTokenExpired && _refreshToken != null) {
       return await refreshAuthToken();
     }
