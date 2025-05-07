@@ -189,9 +189,11 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
 
   Widget _buildCompanyChips(List<int> companyIds) {
     final companies = {
-      1: 'Ride',
-      2: 'Zyride',
-      3: 'Feres',
+      1: 'Sedan',
+      2: 'SUV',
+      3: 'Minivan',
+      4: 'Hatchback',
+      5: 'Pickup Truck',
     };
     return Wrap(
       spacing: 8,
@@ -571,7 +573,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                               const SizedBox(width: 16),
                               Expanded(
                                 child: Text(
-                                  'Ride-Sharing Companies',
+                                  'Car Type',
                                   style: TextStyle(
                                     color: Colors.black.withOpacity(0.6),
                                   ),
