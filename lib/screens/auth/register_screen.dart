@@ -19,8 +19,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _ageController = TextEditingController();
-  String? _selectedGender;
   bool _isLoading = false;
   bool _useEmail = true;
   bool _termsAccepted = false;
@@ -38,7 +36,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _ageController.dispose();
     super.dispose();
   }
 
@@ -62,8 +59,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         email: _useEmail ? _emailController.text.trim() : null,
         phone: !_useEmail ? _phoneController.text.trim() : null,
         password: _passwordController.text.trim(),
-        age: _ageController.text.isNotEmpty ? int.parse(_ageController.text) : null,
-        gender: _selectedGender,
       );
 
       if (!mounted) return;
@@ -163,42 +158,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         )),
                     ]),
                     SizedBox(height: _verticalSpacing),
-                    Row(children: [
-                      Expanded(
-                        flex: 3,
-                        child: _buildTextField(
-                          controller: _ageController,
-                          label: 'Age',
-                          icon: Icons.cake_outlined,
-                          keyboardType: TextInputType.number,
-                          validator: (v) => v!.isNotEmpty && int.tryParse(v) == null 
-                            ? 'Invalid age' : null
-                        )),
-                      SizedBox(width: constraints.maxWidth * 0.03),
-                      Expanded(
-                        flex: 4,
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedGender,
-                          decoration: InputDecoration(
-                            labelText: 'Gender',
-                            labelStyle: TextStyle(fontSize: _inputFontSize),
-                            prefixIcon: const Icon(Icons.transgender, color: Color(0xFF004F2D)),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: 'male', child: Text('Male')),
-                            DropdownMenuItem(value: 'female', child: Text('Female')),
-                          ],
-                          onChanged: (value) => setState(() => _selectedGender = value),
-                          style: TextStyle(fontSize: _inputFontSize, color: Colors.black),
-                        ))
-                    ]),
                     SizedBox(height: _verticalSpacing * 1.5),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8.0),
