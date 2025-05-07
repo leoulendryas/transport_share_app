@@ -13,7 +13,8 @@ class ProfileCompletionScreen extends StatefulWidget {
 
 class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _ageController = TextEditingController();
   XFile? _idImage;
   String? _selectedGender;
@@ -22,41 +23,45 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
     if (_idImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload ID image')),
+        const SnackBar(content: Text('Please upload an ID image')),
       );
       return;
     }
 
     setState(() => _isLoading = true);
+
     try {
-      await Provider.of<AuthService>(context, listen: false).verifyIdentity(
-        name: _nameController.text.trim(),
+      final authService = Provider.of<AuthService>(context, listen: false);
+      await authService.verifyIdentity(
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
         age: int.parse(_ageController.text),
         gender: _selectedGender!,
         idType: _selectedIdType!,
         imagePath: _idImage!.path,
       );
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile completed successfully!'),
-            backgroundColor: Color(0xFF004F2D),
-          ),
-        );
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/rides',
-          (route) => false,
-        );
-      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile completed successfully!'),
+          backgroundColor: Color(0xFF004F2D),
+        ),
+      );
+
+      Navigator.pushNamedAndRemoveUntil(context, '/rides', (route) => false);
     } on AppException catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
       );
     } catch (e) {
+      debugPrint('Unexpected error during identity verification: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('An unexpected error occurred')),
       );
@@ -106,9 +111,25 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
           child: ListView(
             children: [
               TextFormField(
-                controller: _nameController,
+                controller: _firstNameController,
                 decoration: InputDecoration(
-                  labelText: 'Full Name',
+                  labelText: 'First Name',
+                  labelStyle: const TextStyle(color: Color(0xFF004F2D)), // Green text
+                  filled: true,
+                  fillColor: Colors.white, // White background for the field
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF004F2D)),
+                  ),
+                ),
+                validator: (v) => v!.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _lastNameController,
+                decoration: InputDecoration(
+                  labelText: 'Last Name',
                   labelStyle: const TextStyle(color: Color(0xFF004F2D)), // Green text
                   filled: true,
                   fillColor: Colors.white, // White background for the field
@@ -149,7 +170,6 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                 items: const [
                   DropdownMenuItem(value: 'male', child: Text('Male')),
                   DropdownMenuItem(value: 'female', child: Text('Female')),
-                  DropdownMenuItem(value: 'other', child: Text('Other')),
                 ],
                 onChanged: (v) => setState(() => _selectedGender = v),
                 decoration: InputDecoration(
@@ -222,26 +242,27 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                       const LinearProgressIndicator(
                         color: Color(0xFF004F2D),
                       ),
+                    if (auth.isIdVerified || !auth.isVerifying) 
+                      Padding(
+                        padding: const EdgeInsets.only(top: 20),
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF004F2D), // Green button
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
+                              : const Text('Complete Profile'),
+                        ),
+                      ),
                   ],
                 ),
               ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black, // Black button
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: _isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        'Complete Profile', 
-                        style: TextStyle(color: Colors.white), // White text
-                    ),
-              )
             ],
           ),
         ),
