@@ -13,6 +13,7 @@ import '../../widgets/glass_card.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
 class LocationWithName {
   final double latitude;
@@ -264,10 +265,12 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   }
 
   Future<void> _selectCompanies() async {
-    final companies = [
-      {'id': 1, 'name': 'Ride', 'icon': Icons.directions_car},
-      {'id': 2, 'name': 'Zyride', 'icon': Icons.electric_car},
-      {'id': 3, 'name': 'Feres', 'icon': Icons.airport_shuttle},
+    final List<Map<String, dynamic>> companies = [
+      {'id': 1, 'name': 'Sedan', 'icon': MdiIcons.car}, // Generic car icon
+      {'id': 2, 'name': 'SUV', 'icon': MdiIcons.carEstate}, // Estate is closest to SUV
+      {'id': 3, 'name': 'Minivan', 'icon': MdiIcons.caravan}, // Caravan resembles minivan
+      {'id': 4, 'name': 'Hatchback', 'icon': MdiIcons.carHatchback},
+      {'id': 5, 'name': 'Pickup Truck', 'icon': MdiIcons.truck},
     ];
 
     final selected = await showModalBottomSheet<List<int>>(
@@ -284,7 +287,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Select Companies',
+                  'Select Car Type',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -350,9 +353,11 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
     }
 
     final companies = {
-      1: 'Ride',
-      2: 'Zyride',
-      3: 'Feres',
+      1: 'Sedan',
+      2: 'SUV',
+      3: 'Minivan',
+      4: 'Hatchback',
+      5: 'Pickup Truck',
     };
 
     return Wrap(
@@ -543,7 +548,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                 labelText: 'People to share with',
                 labelStyle: TextStyle(color: Colors.black),
                 prefixIcon: Icon(Icons.people, color: Color(0xFF004F2D)),
-                helperText: 'How many people you want to share with (1-3)',
+                helperText: 'How many people you want to share with (1-12)',
                 helperStyle: TextStyle(color: Colors.grey),
                 suffixText: 'Total: $totalPeople people',
                 suffixStyle: TextStyle(color: Colors.black),
@@ -567,7 +572,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                 if (value == null || value.isEmpty) return 'Required';
                 final seats = int.tryParse(value);
                 if (seats == null) return 'Enter a number';
-                if (seats < 1 || seats > 3) return 'Must be 1-3 people';
+                if (seats < 1 || seats > 3) return 'Must be 1-12 people';
                 return null;
               },
               onChanged: (value) => setState(() {}),
@@ -682,7 +687,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Meter-Taxi Companies', style: TextStyle(color: Colors.black54)),
+                          Text('Car Type', style: TextStyle(color: Colors.black54)),
                           const SizedBox(height: 4),
                           _buildSelectedCompanies(),
                         ],
@@ -705,7 +710,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
       backgroundColor: Color(0xFFF7F9F9),
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Create Shared Meter Taxi', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text('Create Shared Meter Transport', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         centerTitle: true,
         elevation: 0,
         backgroundColor: Color(0xFFF7F9F9),
