@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../models/user.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -102,6 +104,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _logout() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    await authService.logout();
+  
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,6 +191,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                    ),
+                    SizedBox(height: 32),
+                    Divider(color: Colors.grey.shade400),
+                    SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _logout,
+                      icon: Icon(Icons.logout, color: Colors.white),
+                      label: Text(
+                        'LOGOUT',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        minimumSize: Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
                     ),
                   ],
                 ),
