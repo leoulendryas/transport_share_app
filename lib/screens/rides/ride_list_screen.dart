@@ -402,10 +402,10 @@ class _RideListScreenState extends State<RideListScreen> {
         children: [
           Icon(
             Icons.directions_car_filled,
-            size: 80,
+            size: 60,
             color: Color(0xFF004F2D).withOpacity(0.9),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
           Text(
             _selectedFromLocation == null || _selectedToLocation == null
                 ? 'Where are you going today?'
@@ -419,7 +419,7 @@ class _RideListScreenState extends State<RideListScreen> {
           const SizedBox(height: 8),
           Text(
             _selectedFromLocation == null || _selectedToLocation == null
-                ? 'Enter your pickup and destination to find shared meter taxis'
+                ? 'Enter your pickup and destination to find shared meter transport'
                 : 'Be the first to create this route!',
             style: const TextStyle(
               fontSize: 16,
@@ -430,7 +430,7 @@ class _RideListScreenState extends State<RideListScreen> {
           const SizedBox(height: 24),
           FilledButton.icon(
             icon: const Icon(Icons.add, color: Colors.white),
-            label: const Text('Create Shared Meter Taxi', style: TextStyle(color: Colors.white)),
+            label: const Text('Create Shared Meter Transport', style: TextStyle(color: Colors.white)),
             onPressed: _navigateToCreateRide,
             style: FilledButton.styleFrom(
               backgroundColor: Colors.black,
@@ -534,7 +534,7 @@ class _RideListScreenState extends State<RideListScreen> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
