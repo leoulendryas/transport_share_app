@@ -4,9 +4,11 @@ import '../../models/ride.dart';
 import 'company_chip.dart';
 
 final Map<int, String> companies = {
-  1: 'Ride',
-  2: 'Zyride',
-  3: 'Feres',
+  1: 'Sedan',
+  2: 'SUV',
+  3: 'Minivan',
+  4: 'Hatchback',
+  5: 'Pickup Truck',
 };
 
 class RideCard extends StatelessWidget {
@@ -20,16 +22,16 @@ class RideCard extends StatelessWidget {
   });
 
   Color _getStatusColor() {
-    if (ride.seatsAvailable <= 0) return const Color(0xFF847979); // Minor detail color
+    if (ride.seatsAvailable <= 0) return const Color(0xFF847979);
     final status = RideStatus.values.firstWhere(
       (e) => e.toString().split('.').last == ride.status,
       orElse: () => RideStatus.pending,
     );
     switch (status) {
       case RideStatus.active:
-        return const Color(0xFF004F2D); // Primary green
+        return const Color(0xFF004F2D);
       case RideStatus.full:
-        return const Color(0xFF847979); // Accent for full
+        return const Color(0xFF847979);
       case RideStatus.completed:
         return Colors.green;
       case RideStatus.canceled:
@@ -74,22 +76,21 @@ class RideCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title + status
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Text(
                         '${ride.fromAddress.split(',').first} → ${ride.toAddress.split(',').first}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF000000),
+                          color: Color(0xFF000000),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -112,34 +113,33 @@ class RideCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-
-                // Sharing + Time
                 Row(
                   children: [
                     const Icon(Icons.people_outline, size: 16, color: Color(0xFF004F2D)),
                     const SizedBox(width: 4),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Shared with ${peopleSharing.clamp(0, peopleSharing)} ${peopleSharing == 1 ? 'person' : 'people'}',
-                          style: const TextStyle(
-                            color: Color(0xFF004F2D),
-                            fontSize: 14,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Shared with ${peopleSharing.clamp(0, peopleSharing)} ${peopleSharing == 1 ? 'person' : 'people'}',
+                            style: const TextStyle(
+                              color: Color(0xFF004F2D),
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                        Text(
-                          isFull
-                              ? 'Ride is full'
-                              : '$availableSharing spot${availableSharing != 1 ? 's' : ''} available',
-                          style: TextStyle(
-                            color: const Color(0xFF847979),
-                            fontSize: 12,
+                          Text(
+                            isFull
+                                ? 'Ride is full'
+                                : '$availableSharing spot${availableSharing != 1 ? 's' : ''} available',
+                            style: const TextStyle(
+                              color: Color(0xFF847979),
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const Spacer(),
                     if (ride.departureTime != null) ...[
                       const Icon(Icons.access_time, size: 16, color: Color(0xFF847979)),
                       const SizedBox(width: 4),
@@ -162,8 +162,6 @@ class RideCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-
-                // Companies
                 if (ride.companyIds.isNotEmpty) ...[
                   Wrap(
                     spacing: 4,
@@ -177,8 +175,6 @@ class RideCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                 ],
-
-                // Progress
                 ClipRRect(
                   borderRadius: BorderRadius.circular(3),
                   child: LinearProgressIndicator(
