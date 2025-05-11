@@ -249,6 +249,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                           onPressed: _isLoading ? null : _submit,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF004F2D), // Green button
+                            foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
