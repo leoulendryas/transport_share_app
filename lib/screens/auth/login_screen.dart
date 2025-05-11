@@ -41,12 +41,16 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     _passwordController.dispose();
     super.dispose();
   }
-
+  
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
+
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
+
+      // Perform login based on authentication mode (email or phone)
       if (_authMode == AuthMode.email) {
         await authService.login(
           email: _emailController.text.trim(),
@@ -59,11 +63,14 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         );
       }
 
-      if (!mounted) return;
+      // After login, navigate based on verification status
+      if (!mounted) return; // Check if the widget is still mounted
 
       if (authService.isIdVerified) {
+        // Navigate to rides page if ID is verified
         Navigator.pushNamedAndRemoveUntil(context, '/rides', (_) => false);
       } else {
+        // Navigate to profile completion or verification depending on the state
         Navigator.pushNamedAndRemoveUntil(
           context,
           authService.isVerified ? '/profile-complete' : '/verify',
@@ -71,10 +78,12 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         );
       }
     } catch (e) {
+      // Display error message on login failure
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Login failed: $e")),
       );
     } finally {
+      // Reset the loading state
       setState(() => _isLoading = false);
     }
   }
