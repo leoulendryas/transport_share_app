@@ -171,7 +171,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFF004F2D), width: 1.5),
                       ),
                       child: ToggleButtons(
                         borderRadius: BorderRadius.circular(10),
