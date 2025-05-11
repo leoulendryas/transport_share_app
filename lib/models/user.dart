@@ -1,3 +1,4 @@
+/// A model representing a user in the system.
 class User {
   final int id;
   final String email;
@@ -12,7 +13,7 @@ class User {
   final bool idVerified;
   final String? idImageUrl;
 
-  User({
+  const User({
     required this.id,
     required this.email,
     required this.createdAt,
@@ -31,7 +32,7 @@ class User {
     return User(
       id: json['id'] as int,
       email: json['email'] as String,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
       firstName: json['first_name'] as String?,
       lastName: json['last_name'] as String?,
       phoneNumber: json['phone_number'] as String?,
