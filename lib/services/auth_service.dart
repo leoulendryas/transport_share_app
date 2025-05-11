@@ -32,6 +32,7 @@ class AuthService extends ChangeNotifier {
     'idVerified': 'id_verified',
   };
   static const _tokenRefreshBuffer = Duration(minutes: 5);
+
   final Lock _lock = Lock();
   SharedPreferences? _prefs;
   String? _token, _refreshToken, _userId, _email, _phone;
@@ -51,12 +52,16 @@ class AuthService extends ChangeNotifier {
   String? get email => _email;
   String? get phone => _phone;
   String? get userId => _userId;
-  bool get isVerified => isEmailVerified || isPhoneVerified;
 
+  // Consider all types of verifications to be "verified"
+  bool get isVerified => isEmailVerified || isPhoneVerified || isIdVerified;
+
+  /// Initializes shared preferences and attempts auto-login using persisted tokens.
   Future<void> init() async {
     if (_initialized) return;
     _prefs ??= await SharedPreferences.getInstance();
     _loadPersistedData();
+
     if (_token != null && _isTokenExpired && _refreshToken != null) {
       try {
         await refreshAuthToken();
@@ -64,13 +69,7 @@ class AuthService extends ChangeNotifier {
         await logout();
       }
     }
-    if (_token != null && isVerified) {
-      try {
-        await refreshAuthToken();
-      } catch (_) {
-        await logout();
-      }
-    }
+
     _initialized = true;
     notifyListeners();
   }
@@ -130,8 +129,8 @@ class AuthService extends ChangeNotifier {
         }),
       );
       final data = _parseResponse(res);
-      if (data.containsKey('message')) {
-        notifyListeners();
+      if (!data.containsKey('access_token')) {
+        notifyListeners(); // Just show message
       } else {
         await _handleAuthResponse(res);
       }
@@ -146,6 +145,7 @@ class AuthService extends ChangeNotifier {
         body: jsonEncode({'phone_number': phone, 'otp': otp}),
       );
       await _handleAuthResponse(res);
+      _prefs?.setBool(_keys['phoneVerified']!, true);
     });
   }
 
@@ -153,6 +153,7 @@ class AuthService extends ChangeNotifier {
     await _safeApiCall(() async {
       final res = await http.get(Uri.parse('$_baseUrl/auth/verify-email?token=$token'));
       await _handleAuthResponse(res);
+      _prefs?.setBool(_keys['emailVerified']!, true);
     });
   }
 
@@ -168,17 +169,17 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> requestOtp(String phone) async {
-      await _safeApiCall(() async {
-        final res = await http.post(
-          Uri.parse('$_baseUrl/auth/request-otp'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'phone_number': phone}),
-        );
-        _parseResponse(res);
-      });
-    }
+    await _safeApiCall(() async {
+      final res = await http.post(
+        Uri.parse('$_baseUrl/auth/request-otp'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'phone_number': phone}),
+      );
+      _parseResponse(res);
+    });
+  }
 
-    Future<void> verifyIdentity({
+  Future<void> verifyIdentity({
     required String firstName,
     required String lastName,
     required int age,
@@ -229,6 +230,7 @@ class AuthService extends ChangeNotifier {
             throw AppException('Verification failed after $retryCount attempts');
           }
         }
+
         await Future.delayed(Duration(seconds: attempt * 2));
       } catch (e) {
         debugPrint('Attempt $attempt threw an error: $e');
@@ -278,7 +280,7 @@ class AuthService extends ChangeNotifier {
 
   Future<String?> getToken() async {
     await ensureInitialized();
-    _loadPersistedData(); // Ensure latest token from SharedPreferences
+    _loadPersistedData();
     if (_isTokenExpired && _refreshToken != null) {
       return await refreshAuthToken();
     }
@@ -288,12 +290,12 @@ class AuthService extends ChangeNotifier {
   Future<http.Response> authenticatedRequest(Future<http.Response> Function() request) async {
     var token = await getToken();
     var response = await request();
-    
+
     if (response.statusCode == 401) {
       token = await refreshAuthToken();
       response = await request();
     }
-    
+
     return response;
   }
 
@@ -320,7 +322,37 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _handleAuthResponse(http.Response res) async {
     final data = _parseResponse(res);
-    await _persistAuthData(data);
+    final user = data['user'];
+
+    _token = data['access_token'];
+    _refreshToken = data['refresh_token'];
+    _tokenExpiry = DateTime.now().toUtc().add(Duration(seconds: data['expires_in']));
+    _userId = user['id'].toString();
+    _email = user['email'];
+    _phone = user['phone_number'];
+    _firstName = user['first_name'];
+    _lastName = user['last_name'];
+    _age = user['age'];
+    _gender = user['gender'];
+    _idImageUrl = user['id_image_url'];
+
+    await _prefs?.setString(_keys['token']!, _token!);
+    await _prefs?.setString(_keys['refreshToken']!, _refreshToken!);
+    await _prefs?.setString(_keys['userId']!, _userId!);
+    await _prefs?.setString(_keys['email']!, _email ?? '');
+    await _prefs?.setString(_keys['phone']!, _phone ?? '');
+    await _prefs?.setString(_keys['firstName']!, _firstName ?? '');
+    await _prefs?.setString(_keys['lastName']!, _lastName ?? '');
+    await _prefs?.setInt(_keys['age']!, _age ?? 0);
+    await _prefs?.setString(_keys['gender']!, _gender ?? '');
+    await _prefs?.setString(_keys['idImageUrl']!, _idImageUrl ?? '');
+    await _prefs?.setString(_keys['tokenExpiry']!, _tokenExpiry!.toIso8601String());
+
+    await _prefs?.setBool(_keys['emailVerified']!, user['email_verified'] ?? false);
+    await _prefs?.setBool(_keys['phoneVerified']!, user['phone_verified'] ?? false);
+    await _prefs?.setBool(_keys['idVerified']!, user['id_verified'] ?? false);
+
+    notifyListeners();
   }
 
   void _loadPersistedData() {
@@ -337,18 +369,27 @@ class AuthService extends ChangeNotifier {
     _age = p.getInt(_keys['age']!);
     _gender = p.getString(_keys['gender']!);
     _idImageUrl = p.getString(_keys['idImageUrl']!);
-    _tokenExpiry = DateTime.tryParse(p.getString(_keys['tokenExpiry']!) ?? '');
+
+    final expiryStr = p.getString(_keys['tokenExpiry']!);
+    if (expiryStr != null) {
+      try {
+        _tokenExpiry = DateTime.parse(expiryStr);
+      } catch (e) {
+        debugPrint('Failed to parse token expiry date: $e');
+        _tokenExpiry = null;
+      }
+    }
   }
 
   Future<void> _persistAuthData(Map<String, dynamic> data) async {
     final p = _prefs;
     if (p == null) return;
-
+  
     final user = data['user'] ?? {};
     _token = data['access_token'];
     _refreshToken = data['refresh_token'];
-    _tokenExpiry = DateTime.now().add(Duration(seconds: data['expires_in']));
-
+    _tokenExpiry = DateTime.now().toUtc().add(Duration(seconds: data['expires_in']));
+  
     _userId = user['id']?.toString();
     _email = user['email'];
     _phone = user['phone_number'];
@@ -357,7 +398,7 @@ class AuthService extends ChangeNotifier {
     _age = user['age'];
     _gender = user['gender'];
     _idImageUrl = user['id_image_url'];
-
+  
     await p.setString(_keys['token']!, _token!);
     await p.setString(_keys['refreshToken']!, _refreshToken!);
     await p.setString(_keys['userId']!, _userId ?? '');
@@ -365,26 +406,31 @@ class AuthService extends ChangeNotifier {
     await p.setString(_keys['phone']!, _phone ?? '');
     await p.setString(_keys['firstName']!, _firstName ?? '');
     await p.setString(_keys['lastName']!, _lastName ?? '');
-    await p.setInt(_keys['age']!, _age ?? 0);
+    if (_age != null) await p.setInt(_keys['age']!, _age!);
     await p.setString(_keys['gender']!, _gender ?? '');
     await p.setString(_keys['idImageUrl']!, _idImageUrl ?? '');
     await p.setString(_keys['tokenExpiry']!, _tokenExpiry!.toIso8601String());
-    await p.setBool(_keys['emailVerified']!, user['email_verified'] ?? false);
-    await p.setBool(_keys['phoneVerified']!, user['phone_verified'] ?? false);
-    await p.setBool(_keys['idVerified']!, user['id_verified'] ?? false);
-
-    notifyListeners();
   }
 
   Future<void> _clearAuthData() async {
-    _token = _refreshToken = _userId = _email = _phone = _firstName = _lastName = _gender = _idImageUrl = null;
-    _age = null;
-    _tokenExpiry = null;
+    final p = _prefs;
+    if (p == null) return;
 
-    final keys = _keys.values;
-    for (final key in keys) {
-      await _prefs?.remove(key);
+    for (final key in _keys.values) {
+      await p.remove(key);
     }
+
+    _token = null;
+    _refreshToken = null;
+    _userId = null;
+    _email = null;
+    _phone = null;
+    _firstName = null;
+    _lastName = null;
+    _age = null;
+    _gender = null;
+    _idImageUrl = null;
+    _tokenExpiry = null;
 
     notifyListeners();
   }
