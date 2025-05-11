@@ -25,7 +25,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initDeepLinks();
+    _initDeepLinks(); // Moved here
   }
 
   @override
@@ -59,8 +59,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           await authService.verifyEmail(token);
           if (authService.isAuthenticated && authService.isVerified) {
             navigatorKey.currentState?.pushNamedAndRemoveUntil(
-              '/rides', 
-              (route) => false
+              '/rides',
+              (route) => false,
             );
           }
         }
@@ -80,19 +80,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         title: 'Met Share',
         navigatorKey: navigatorKey,
         theme: ThemeData(
-          primarySwatch: Colors.purple,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
+          scaffoldBackgroundColor: Color(0xFFF7F9F9),
           fontFamily: 'Roboto',
-          scaffoldBackgroundColor: Colors.black,
+          primaryColor: Color(0xFF004F2D),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Color(0xFF004F2D),
+            primary: Color(0xFF004F2D),
+            secondary: Colors.black,
+          ),
+          textTheme: Theme.of(context).textTheme.apply(bodyColor: Colors.black),
         ),
         initialRoute: '/splash',
         routes: {
-          '/splash': (context) => const SplashScreen(),
+          '/splash': (context) => SplashScreen(initDeepLinks: _initDeepLinks),
           '/login': (context) => const LoginScreen(),
           '/register': (context) => const RegisterScreen(),
           '/rides': (context) => const RideListScreen(),
           '/verify': (context) => const VerifyScreen(),
-          '/profile-complete': (context) => const ProfileCompletionScreen(), 
+          '/profile-complete': (context) => const ProfileCompletionScreen(),
           '/create-ride': (context) => const CreateRideScreen(),
           '/sos': (context) => const SosScreen(rideId: 'defaultRideId'),
         },
@@ -102,11 +107,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             listen: false,
           );
 
-          // Route protection
-          if (settings.name != '/login' && 
-              settings.name != '/register' && 
-              settings.name != '/verify' &&
-              !authService.isAuthenticated) {
+          if (!authService.isAuthenticated &&
+              settings.name != '/login' &&
+              settings.name != '/register' &&
+              settings.name != '/splash') {
             return MaterialPageRoute(builder: (_) => const LoginScreen());
           }
 
@@ -114,23 +118,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             return MaterialPageRoute(builder: (_) => const VerifyScreen());
           }
 
-          // app.dart - onGenerateRoute
-          if (settings.name == '/create-ride') {
-            final auth = Provider.of<AuthService>(navigatorKey.currentContext!, listen: false);
-            if (!auth.isIdVerified) {
-              return MaterialPageRoute(builder: (_) => const ProfileCompletionScreen());
-            }
+          if (settings.name == '/create-ride' && !authService.isIdVerified) {
+            return MaterialPageRoute(builder: (_) => const ProfileCompletionScreen());
           }
 
-          return null;
+          return null; // Proceed with default routing
         },
+        onUnknownRoute: (_) => MaterialPageRoute(
+          builder: (_) => const Scaffold(
+            body: Center(child: Text('Page not found')),
+          ),
+        ),
       ),
     );
   }
 }
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  final Future<void> Function()? initDeepLinks;
+
+  const SplashScreen({super.key, this.initDeepLinks});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -147,16 +154,24 @@ class _SplashScreenState extends State<SplashScreen> {
     final authService = Provider.of<AuthService>(context, listen: false);
     await authService.init();
 
+    print("Authenticated: ${authService.isAuthenticated}");
+    print("Email Verified: ${authService.isVerified}");
+    print("ID Verified: ${authService.isIdVerified}");
+
     if (mounted) {
-      final route = authService.isAuthenticated 
+      final route = authService.isAuthenticated
           ? authService.isVerified
-              ? authService.isIdVerified 
-                  ? '/rides' 
+              ? authService.isIdVerified
+                  ? '/rides'
                   : '/profile-complete'
               : '/verify'
           : '/login';
 
-      Navigator.pushReplacementNamed(context, route);
+      Navigator.pushReplacementNamed(context, route).then((_) {
+        if (widget.initDeepLinks != null) {
+          Future.microtask(() => widget.initDeepLinks!());
+        }
+      });
     }
   }
 
@@ -165,7 +180,8 @@ class _SplashScreenState extends State<SplashScreen> {
     return const Scaffold(
       body: Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+        ),
       ),
     );
   }
