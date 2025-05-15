@@ -213,6 +213,9 @@ class ApiService {
     required int seats,
     required DateTime? departureTime,
     required List<int> companies,
+    required String plateNumber,
+    required String brandName,
+    required String color,
   }) async {
     try {
       if (seats < 1 || seats > 8) {
@@ -230,6 +233,9 @@ class ApiService {
         'from_address': fromAddress,
         'to_address': toAddress,
         'companies': companies,
+        'plate_number': plateNumber,
+        'brand_name': brandName,
+        'color': color,
         if (departureTime != null) 'departure_time': departureTime.toIso8601String(),
       };
 
