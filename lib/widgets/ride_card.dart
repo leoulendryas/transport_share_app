@@ -43,6 +43,24 @@ class RideCard extends StatelessWidget {
     }
   }
 
+  Color _getColorFromString(String colorName) {
+    final colorMap = {
+      'red': Colors.red,
+      'blue': Colors.blue,
+      'green': const Color(0xFF004F2D),
+      'black': Colors.black,
+      'white': Colors.white,
+      'gray': Colors.grey,
+      'silver': Colors.grey.shade400,
+      'grey': Colors.grey,
+      'white': Colors.white,
+      'yellow': Colors.yellow,
+      'orange': Colors.orange,
+      'purple': Colors.purple,
+    };
+    return colorMap[colorName.toLowerCase()] ?? const Color(0xFF004F2D);
+  }
+
   @override
   Widget build(BuildContext context) {
     final peopleSharing = ride.totalSeats - 1;
@@ -76,6 +94,7 @@ class RideCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Route Header
                 Row(
                   children: [
                     Expanded(
@@ -113,6 +132,28 @@ class RideCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                // Vehicle Details
+                Row(
+                  children: [
+                    _buildVehicleDetail(
+                      icon: Icons.confirmation_number,
+                      label: 'Plate',
+                      value: ride.plateNumber,
+                    ),
+                    const SizedBox(width: 16),
+                    _buildVehicleDetail(
+                      icon: Icons.directions_car,
+                      label: 'Brand',
+                      value: ride.brandName,
+                    ),
+                    const SizedBox(width: 16),
+                    _buildColorIndicator(),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // People and Time Row
                 Row(
                   children: [
                     const Icon(Icons.people_outline, size: 16, color: Color(0xFF004F2D)),
@@ -162,6 +203,8 @@ class RideCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                // Company Chips
                 if (ride.companyIds.isNotEmpty) ...[
                   Wrap(
                     spacing: 4,
@@ -175,6 +218,8 @@ class RideCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                 ],
+
+                // Progress Bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(3),
                   child: LinearProgressIndicator(
@@ -189,6 +234,81 @@ class RideCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildVehicleDetail({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: const Color(0xFF004F2D)),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF847979),
+                fontSize: 12,
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Color(0xFF000000),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildColorIndicator() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            color: _getColorFromString(ride.color),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.grey.shade300,
+              width: 1,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Color',
+              style: TextStyle(
+                color: Color(0xFF847979),
+                fontSize: 12,
+              ),
+            ),
+            Text(
+              ride.color,
+              style: const TextStyle(
+                color: Color(0xFF000000),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
