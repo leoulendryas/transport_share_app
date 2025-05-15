@@ -23,6 +23,9 @@ class Ride {
   final String driverEmail;
   final int participants;
   final List<int> companyIds;
+  final String plateNumber;
+  final String color;
+  final String brandName;
 
   Ride({
     required this.id,
@@ -39,10 +42,12 @@ class Ride {
     required this.driverEmail,
     required this.participants,
     required this.companyIds,
+    required this.plateNumber,
+    required this.color,
+    required this.brandName,
   });
 
   factory Ride.fromJson(Map<String, dynamic> json) {
-    // Parse locations - handle both WKB and separate lat/lng formats
     final fromLocation = _parseLocation(
       wkb: json['from_location'] as String?,
       lat: json['from_lat'] as num?,
@@ -55,31 +60,27 @@ class Ride {
       lng: json['to_lng'] as num?,
     );
 
-    // Handle participants with null safety
     final participants = json['participants'] is int
         ? json['participants'] as int
         : int.tryParse(json['participants'].toString()) ?? 0;
 
-    // Handle company IDs with null safety
     final companyIds = (json['company_ids'] as List<dynamic>?)
         ?.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0)
         .where((e) => e != 0)
         .toList() ?? [];
 
-    // Handle status with null safety
     final status = json['status'] != null
         ? _parseRideStatus(json['status'] as String)
         : RideStatus.active;
 
-    // Handle driver email with null safety
     final driverEmail = json['driver_email'] as String? ?? '';
 
     return Ride(
       id: json['id'] as int,
       driverId: json['driver_id'] as int,
-      fromLocation: fromLocation ?? LatLng(0, 0), // Removed const
+      fromLocation: fromLocation ?? LatLng(0, 0),
       fromAddress: json['from_address'] as String? ?? '',
-      toLocation: toLocation ?? LatLng(0, 0), // Removed const
+      toLocation: toLocation ?? LatLng(0, 0),
       toAddress: json['to_address'] as String? ?? '',
       totalSeats: (json['total_seats'] as num?)?.toInt() ?? 0,
       seatsAvailable: (json['seats_available'] as num?)?.toInt() ?? 0,
@@ -91,6 +92,9 @@ class Ride {
       driverEmail: driverEmail,
       participants: participants,
       companyIds: companyIds,
+      plateNumber: json['plate_number'] as String? ?? '',
+      color: json['color'] as String? ?? '',
+      brandName: json['brand_name'] as String? ?? '',
     );
   }
 
@@ -99,12 +103,10 @@ class Ride {
     num? lat,
     num? lng,
   }) {
-    // First try separate lat/lng fields
     if (lat != null && lng != null) {
       return LatLng(lat.toDouble(), lng.toDouble());
     }
 
-    // Fall back to WKB parsing if available
     if (wkb != null) {
       return _parseWkbLocation(wkb);
     }
@@ -113,22 +115,18 @@ class Ride {
   }
 
   static LatLng? _parseWkbLocation(String wkb) {
-    // Simplified WKB parsing - adjust based on your actual WKB format
     try {
-      // This is a placeholder - implement proper WKB parsing for your needs
-      // Real WKB parsing would need to handle the binary format properly
       final coords = wkb.split(RegExp(r'[^0-9.-]+'))
           .where((s) => s.isNotEmpty)
           .map(double.tryParse)
           .whereType<double>()
           .toList();
-      
+
       if (coords.length >= 2) {
         return LatLng(coords[0], coords[1]);
       }
-    } catch (e) {
-      // Removed print statement - consider using a logger in production
-    }
+    } catch (e) {}
+
     return null;
   }
 
@@ -160,6 +158,9 @@ class Ride {
       'driver_email': driverEmail,
       'participants': participants,
       'company_ids': companyIds,
+      'plate_number': plateNumber,
+      'color': color,
+      'brand_name': brandName,
     };
   }
 
@@ -178,6 +179,9 @@ class Ride {
     String? driverEmail,
     int? participants,
     List<int>? companyIds,
+    String? plateNumber,
+    String? color,
+    String? brandName,
   }) {
     return Ride(
       id: id ?? this.id,
@@ -194,6 +198,9 @@ class Ride {
       driverEmail: driverEmail ?? this.driverEmail,
       participants: participants ?? this.participants,
       companyIds: companyIds ?? this.companyIds,
+      plateNumber: plateNumber ?? this.plateNumber,
+      color: color ?? this.color,
+      brandName: brandName ?? this.brandName,
     );
   }
 
@@ -201,6 +208,7 @@ class Ride {
   String toString() {
     return 'Ride(id: $id, driverId: $driverId, from: $fromAddress, '
         'to: $toAddress, seats: $seatsAvailable/$totalSeats, '
-        'departs: ${departureTime?.toIso8601String()})';
+        'departs: ${departureTime?.toIso8601String()}, '
+        'plate: $plateNumber, color: $color, brand: $brandName)';
   }
 }
