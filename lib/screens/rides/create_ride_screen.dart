@@ -39,6 +39,9 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   final _fromController = TextEditingController();
   final _toController = TextEditingController();
   final _seatsController = TextEditingController(text: '1');
+  final _plateNumberController = TextEditingController();
+  final _brandNameController = TextEditingController();
+  String? _selectedColor; 
   DateTime? _selectedTime;
   late ApiService _apiService;
   List<int> _selectedCompanies = [];
@@ -60,8 +63,20 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
     _toController.dispose();
     _seatsController.dispose();
     _searchDebounce?.cancel();
+    _plateNumberController.dispose();
+    _brandNameController.dispose();
     super.dispose();
   }
+
+  final List<Map<String, dynamic>> vehicleColors = [
+    {'name': 'Red', 'color': Colors.red},
+    {'name': 'Blue', 'color': Colors.blue},
+    {'name': 'Green', 'color': Colors.green},
+    {'name': 'Black', 'color': Colors.black},
+    {'name': 'White', 'color': Colors.white},
+    {'name': 'Silver', 'color': Colors.grey[350]},
+    {'name': 'Yellow', 'color': Colors.yellow},
+  ];
 
   Future<List<LocationWithName>> _getLocationSuggestions(String query) async {
     if (query.isEmpty) return [];
@@ -159,6 +174,9 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         seats: seats,
         departureTime: _selectedTime,
         companies: _selectedCompanies,
+        plateNumber: _plateNumberController.text,
+        brandName: _brandNameController.text,
+        color: _selectedColor!,
       );
 
       if (mounted) {
@@ -367,6 +385,132 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         color: Color(0xFF004F2D), // Changed to green
         icon: Icons.directions_car,
       )).toList(),
+    );
+  }
+
+  Widget _buildVehicleDetailsSection() {
+    return GlassCard(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Vehicle Details',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF004F2D),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Plate Number
+            _buildTextField(
+              controller: _plateNumberController,
+              label: 'License Plate Number',
+              icon: Icons.confirmation_number,
+              validatorText: 'License plate is required',
+            ),
+            const SizedBox(height: 16),
+
+            // Brand
+            _buildTextField(
+              controller: _brandNameController,
+              label: 'Vehicle Brand',
+              icon: Icons.directions_car,
+              hint: 'e.g. Toyota',
+              validatorText: 'Vehicle brand is required',
+            ),
+            const SizedBox(height: 16),
+
+            // Color Picker
+            _buildColorDropdown(),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: 150.ms, duration: 300.ms).slideY(begin: 0.1, end: 0);
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required String validatorText,
+    String? hint,
+  }) {
+    return TextFormField(
+      controller: controller,
+      style: TextStyle(color: Colors.black),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        labelStyle: TextStyle(color: Colors.black),
+        prefixIcon: Icon(icon, color: Color(0xFF004F2D)),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Color(0xFF004F2D)),
+        ),
+      ),
+      validator: (value) => value!.isEmpty ? validatorText : null,
+    );
+  }
+  
+  Widget _buildColorDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedColor,
+      onChanged: (value) => _selectedColor = value,
+      validator: (value) => value == null ? 'Vehicle color is required' : null,
+      decoration: InputDecoration(
+        labelText: 'Vehicle Color',
+        labelStyle: TextStyle(color: Colors.black),
+        prefixIcon: Icon(Icons.color_lens, color: Color(0xFF004F2D)),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Color(0xFF004F2D)),
+        ),
+      ),
+      items: vehicleColors.map((item) {
+        return DropdownMenuItem<String>(
+          value: item['name'],
+          child: Row(
+            children: [
+              Container(
+                width: 16,
+                height: 16,
+                margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(
+                  color: item['color'],
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+              ),
+              Text(item['name']),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -786,6 +930,8 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                 _buildRouteSection(),
                 const SizedBox(height: 20),
                 _buildSharingSection(),
+                const SizedBox(height: 20),
+                _buildVehicleDetailsSection(), 
                 const SizedBox(height: 20),
                 _buildOptionsSection(),
                 const SizedBox(height: 32),
