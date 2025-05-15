@@ -481,26 +481,128 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
     return DateFormat('EEE, MMM d • h:mm a').format(dateTime);
   }
 
+  Color _getColorFromString(String colorName) {
+    final colorMap = {
+      'red': Colors.red,
+      'blue': Colors.blue,
+      'green': const Color(0xFF004F2D),
+      'black': Colors.black,
+      'white': Colors.white,
+      'gray': Colors.grey,
+      'grey': Colors.grey,
+      'silver': Colors.grey.shade400,
+      'yellow': Colors.yellow,
+      'orange': Colors.orange,
+      'purple': Colors.purple,
+    };
+    return colorMap[colorName.toLowerCase()] ?? const Color(0xFF004F2D);
+  }
+
+  Widget _buildVehicleDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF004F2D).withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(2, 2),
+                ),
+              ],
+            ),
+            child: Icon(
+              icon,
+              size: 24,
+              color: const Color(0xFF004F2D),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.black.withOpacity(0.5),
+                    fontSize: 13,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (color != null)
+                  Row(
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.grey.shade300, width: 1),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        value,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: Color(0xFFF7F9F9),
+        backgroundColor: const Color(0xFFF7F9F9),
         body: Center(
           child: CircularProgressIndicator(
-            color: Color(0xFF004F2D),
+            color: const Color(0xFF004F2D),
           ),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: Color(0xFFF7F9F9),
+      backgroundColor: const Color(0xFFF7F9F9),
       extendBodyBehindAppBar: false,
       appBar: AppBar(
         title: Text(
           'Ride to ${_ride.toAddress.split(',').first}',
-          style: TextStyle(
+          style: const TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
           ),
@@ -509,7 +611,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
         elevation: 0,
         backgroundColor: Colors.transparent,
         scrolledUnderElevation: 4,
-        iconTheme: IconThemeData(color: Color(0xFF004F2D)),
+        iconTheme: const IconThemeData(color: Color(0xFF004F2D)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -518,7 +620,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -540,15 +642,15 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                     'Pickup Location',
                     _ride.fromAddress,
                   ),
-                  const SizedBox(height: 16), 
+                  const SizedBox(height: 16),
                   _buildDetailCard(
                     Icons.flag_outlined,
                     'Destination',
                     _ride.toAddress,
                   ),
-                  const SizedBox(height: 16), 
+                  const SizedBox(height: 16),
                   _buildSeatInfoCard(),
-                  const SizedBox(height: 16), 
+                  const SizedBox(height: 16),
                   GlassCard(
                     color: Colors.white,
                     child: Padding(
@@ -561,10 +663,10 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: Color(0xFF004F2D).withOpacity(0.1),
+                                  color: const Color(0xFF004F2D).withOpacity(0.1),
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(
+                                child: const Icon(
                                   Icons.directions_car_filled,
                                   size: 24,
                                   color: Color(0xFF004F2D),
@@ -583,6 +685,35 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
                           ),
                           const SizedBox(height: 12),
                           _buildCompanyChips(_ride.companyIds),
+                          const SizedBox(height: 16),
+                          GlassCard(
+                            color: Colors.white,
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                children: [
+                                  _buildVehicleDetailRow(
+                                    icon: Icons.confirmation_number,
+                                    label: 'License Plate',
+                                    value: _ride.plateNumber,
+                                  ),
+                                  const Divider(height: 1),
+                                  _buildVehicleDetailRow(
+                                    icon: Icons.directions_car,
+                                    label: 'Vehicle Brand',
+                                    value: _ride.brandName,
+                                  ),
+                                  const Divider(height: 1),
+                                  _buildVehicleDetailRow(
+                                    icon: Icons.color_lens,
+                                    label: 'Vehicle Color',
+                                    value: _ride.color,
+                                    color: _getColorFromString(_ride.color),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0),
                         ],
                       ),
                     ),
@@ -594,7 +725,7 @@ class _RideDetailScreenState extends State<RideDetailScreen> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  const SizedBox(height: 16), 
+                  const SizedBox(height: 16),
                   ..._buildActionButtons(),
                   const SizedBox(height: 20),
                   if (!_isDriver && !_isParticipant)
