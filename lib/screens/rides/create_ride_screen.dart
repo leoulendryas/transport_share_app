@@ -41,6 +41,11 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   final _seatsController = TextEditingController(text: '1');
   final _plateNumberController = TextEditingController();
   final _brandNameController = TextEditingController();
+  final _priceController = TextEditingController();  // NEW
+  double? _minPrice;  // NEW
+  double? _maxPrice;  // NEW
+  double? _basePrice; // NEW
+  bool _priceCalculated = false; // NEW
   String? _selectedColor; 
   DateTime? _selectedTime;
   late ApiService _apiService;
@@ -60,6 +65,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   @override
   void dispose() {
     _fromController.dispose();
+    _priceController.dispose(); // NEW
     _toController.dispose();
     _seatsController.dispose();
     _searchDebounce?.cancel();
@@ -77,6 +83,45 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
     {'name': 'Silver', 'color': Colors.grey[350]},
     {'name': 'Yellow', 'color': Colors.yellow},
   ];
+
+  // NEW: Price calculation method
+  Future<void> _calculatePrice() async {
+    if (_selectedFromLocation == null || _selectedToLocation == null) {
+      _showErrorSnackbar('Please select both locations first');
+      return;
+    }
+
+    final seats = int.tryParse(_seatsController.text) ?? 0;
+    if (seats < 1 || seats > 8) {
+      _showErrorSnackbar('Please enter valid seat count (1-8)');
+      return;
+    }
+
+    try {
+      final response = await _apiService.calculateRidePrice(
+        from: _selectedFromLocation!,
+        to: _selectedToLocation!,
+        seats: seats,
+      );
+
+      setState(() {
+        _minPrice = response['min_price'] as double;
+        _maxPrice = response['max_price'] as double;
+        _basePrice = response['base_price'] as double;
+        _priceController.text = _basePrice!.toStringAsFixed(2);
+        _priceCalculated = true;
+      });
+
+      if (mounted) {
+        _showSuccessSnackbar(
+          'Suggested price: \ETB${_basePrice!.toStringAsFixed(2)} '
+          '(Range: \ETB${_minPrice!.toStringAsFixed(2)} - \ETB${_maxPrice!.toStringAsFixed(2)})'
+        );
+      }
+    } catch (e) {
+      _showErrorSnackbar('Failed to calculate price: ${e.toString()}');
+    }
+  }
 
   Future<List<LocationWithName>> _getLocationSuggestions(String query) async {
     if (query.isEmpty) return [];
@@ -165,6 +210,14 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
 
     try {
       final seats = int.tryParse(_seatsController.text) ?? 0;
+      final price = double.tryParse(_priceController.text) ?? 0.0;  // NEW
+
+      // NEW PRICE VALIDATION
+      if (price < _minPrice! || price > _maxPrice!) {
+        _showErrorSnackbar('Price must be between \$${_minPrice!.toStringAsFixed(2)} '
+          'and \$${_maxPrice!.toStringAsFixed(2)}');
+        return;
+      }
 
       await _apiService.createRide(
         from: _selectedFromLocation!,
@@ -177,6 +230,7 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         plateNumber: _plateNumberController.text,
         brandName: _brandNameController.text,
         color: _selectedColor!,
+        pricePerSeat: price,  // NEW
       );
 
       if (mounted) {
@@ -431,6 +485,73 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
         ),
       ),
     ).animate().fadeIn(delay: 150.ms, duration: 300.ms).slideY(begin: 0.1, end: 0);
+  }
+
+  Widget _buildPricingSection() {
+    return GlassCard(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pricing',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _priceController,
+                    decoration: InputDecoration(
+                      labelText: 'Price per seat',
+                      prefixIcon: Icon(Icons.attach_money, color: Color(0xFF004F2D)),
+                      suffixText: 'ETB',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'Required';
+                      final price = double.tryParse(value);
+                      if (price == null) return 'Invalid number';
+                      if (_minPrice != null && _maxPrice != null && 
+                          (price < _minPrice! || price > _maxPrice!)) {
+                        return 'Must be between \$${_minPrice!.toStringAsFixed(2)}-\$${_maxPrice!.toStringAsFixed(2)}';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FilledButton.icon(
+                  icon: Icon(Icons.calculate),
+                  label: Text('Calculate'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Color(0xFF004F2D),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _calculatePrice,
+                ),
+              ],
+            ),
+            if (_minPrice != null && _maxPrice != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Suggested range: \ETB${_minPrice!.toStringAsFixed(2)} - \ETB${_maxPrice!.toStringAsFixed(2)}',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: 150.ms);
   }
 
   Widget _buildTextField({
@@ -935,6 +1056,8 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
                 const SizedBox(height: 20),
                 _buildOptionsSection(),
                 const SizedBox(height: 32),
+                _buildPricingSection(), // NEW
+                const SizedBox(height: 20),
                 FilledButton(
                   onPressed: _isSubmitting ? null : _submit,
                   style: FilledButton.styleFrom(
