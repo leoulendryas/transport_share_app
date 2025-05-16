@@ -90,7 +90,6 @@ class ApiService {
           throw ApiException('Session expired. Please login again.', 401);
         }
 
-        // Retry with new token
         continue;
       } catch (e) {
         if (attempt > maxRetries) {
@@ -146,6 +145,33 @@ class ApiService {
     }
 
     throw _parseErrorResponse(response);
+  }
+
+  Future<Map<String, dynamic>> calculateRidePrice({
+    required LatLng from,
+    required LatLng to,
+    required int seats,
+  }) async {
+    try {
+      final response = await _makeAuthenticatedRequest(
+        () async => http.post(
+          Uri.parse('$_baseUrl/rides/calculate-price'),
+          headers: await _getHeaders(),
+          body: jsonEncode({
+            'from': {'lat': from.latitude, 'lng': from.longitude},
+            'to': {'lat': to.latitude, 'lng': to.longitude},
+            'seats': seats
+          }),
+        ),
+        endpointKey: 'calculate_price',
+      );
+  
+      return _handleResponse(response);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException('Failed to calculate price: ${e.toString()}', 0);
+    }
   }
 
   Future<Map<String, dynamic>> getRides({
@@ -211,6 +237,7 @@ class ApiService {
     required String fromAddress,
     required String toAddress,
     required int seats,
+    required double pricePerSeat,
     required DateTime? departureTime,
     required List<int> companies,
     required String plateNumber,
@@ -230,6 +257,7 @@ class ApiService {
         'from': {'lat': from.latitude, 'lng': from.longitude},
         'to': {'lat': to.latitude, 'lng': to.longitude},
         'seats': seats,
+        'price_per_seat': pricePerSeat,
         'from_address': fromAddress,
         'to_address': toAddress,
         'companies': companies,
@@ -244,9 +272,8 @@ class ApiService {
           Uri.parse('$_baseUrl/rides'),
           headers: await _getHeaders(),
           body: jsonEncode(requestBody),
-        ),
-        endpointKey: 'create_ride',
-      );
+          //endpointKey: 'create_ride',
+      ));
 
       return Ride.fromJson(_handleResponse(response));
     } on ApiException {
