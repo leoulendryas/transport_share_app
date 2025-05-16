@@ -66,6 +66,7 @@ class RideCard extends StatelessWidget {
     final peopleSharing = ride.totalSeats - 1;
     final availableSharing = ride.seatsAvailable;
     final isFull = ride.seatsAvailable <= 0;
+    final pricePerSeat = ride.pricePerSeat;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -94,7 +95,7 @@ class RideCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Route Header
+                // Route Header with Price
                 Row(
                   children: [
                     Expanded(
@@ -109,25 +110,38 @@ class RideCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor().withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _getStatusColor(),
-                          width: 1,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'ETB ${pricePerSeat.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF004F2D),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        isFull ? 'FULL' : ride.status.toString().split('.').last.toUpperCase(),
-                        style: TextStyle(
-                          color: _getStatusColor(),
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _getStatusColor().withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _getStatusColor(),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            isFull ? 'FULL' : ride.status.toString().split('.').last.toUpperCase(),
+                            style: TextStyle(
+                              color: _getStatusColor(),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
