@@ -17,6 +17,7 @@ class Ride {
   final String toAddress;
   final int totalSeats;
   final int seatsAvailable;
+  final double pricePerSeat;
   final DateTime? departureTime;
   final RideStatus status;
   final DateTime createdAt;
@@ -36,6 +37,7 @@ class Ride {
     required this.toAddress,
     required this.totalSeats,
     required this.seatsAvailable,
+    required this.pricePerSeat,
     this.departureTime,
     required this.status,
     required this.createdAt,
@@ -84,6 +86,7 @@ class Ride {
       toAddress: json['to_address'] as String? ?? '',
       totalSeats: (json['total_seats'] as num?)?.toInt() ?? 0,
       seatsAvailable: (json['seats_available'] as num?)?.toInt() ?? 0,
+      pricePerSeat: double.tryParse(json['price_per_seat'].toString()) ?? 0.0,
       departureTime: json['departure_time'] != null
           ? DateTime.tryParse(json['departure_time'] as String)
           : null,
@@ -152,6 +155,7 @@ class Ride {
       'to_address': toAddress,
       'total_seats': totalSeats,
       'seats_available': seatsAvailable,
+      'price_per_seat': pricePerSeat,
       'departure_time': departureTime?.toIso8601String(),
       'status': status.name,
       'created_at': createdAt.toIso8601String(),
@@ -173,6 +177,7 @@ class Ride {
     String? toAddress,
     int? totalSeats,
     int? seatsAvailable,
+    double? pricePerSeat,
     DateTime? departureTime,
     RideStatus? status,
     DateTime? createdAt,
@@ -192,6 +197,7 @@ class Ride {
       toAddress: toAddress ?? this.toAddress,
       totalSeats: totalSeats ?? this.totalSeats,
       seatsAvailable: seatsAvailable ?? this.seatsAvailable,
+      pricePerSeat: pricePerSeat ?? this.pricePerSeat,
       departureTime: departureTime ?? this.departureTime,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
@@ -208,6 +214,7 @@ class Ride {
   String toString() {
     return 'Ride(id: $id, driverId: $driverId, from: $fromAddress, '
         'to: $toAddress, seats: $seatsAvailable/$totalSeats, '
+        'price: \$${pricePerSeat.toStringAsFixed(2)}, '
         'departs: ${departureTime?.toIso8601String()}, '
         'plate: $plateNumber, color: $color, brand: $brandName)';
   }
