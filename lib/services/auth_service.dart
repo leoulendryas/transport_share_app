@@ -26,50 +26,34 @@ class AuthService extends ChangeNotifier {
     'age': 'user_age',
     'gender': 'user_gender',
     'idImageUrl': 'id_image_url',
-    'tokenExpiry': 'token_expiry',
     'emailVerified': 'email_verified',
     'phoneVerified': 'phone_verified',
     'idVerified': 'id_verified',
   };
-  static const _tokenRefreshBuffer = Duration(minutes: 5);
 
   final Lock _lock = Lock();
   SharedPreferences? _prefs;
   String? _token, _refreshToken, _userId, _email, _phone;
   String? _firstName, _lastName, _gender, _idImageUrl;
   int? _age;
-  DateTime? _tokenExpiry;
   bool _initialized = false, _isRefreshing = false, _isVerifying = false;
 
   String? get token => _token;
   bool get isInitialized => _initialized;
-  bool get isAuthenticated => _token != null && !_isTokenExpired;
+  bool get isAuthenticated => _token != null;
   bool get isEmailVerified => _prefs?.getBool(_keys['emailVerified']!) ?? false;
   bool get isPhoneVerified => _prefs?.getBool(_keys['phoneVerified']!) ?? false;
   bool get isIdVerified => _prefs?.getBool(_keys['idVerified']!) ?? false;
   bool get isVerifying => _isVerifying;
-  bool get _isTokenExpired => _tokenExpiry?.isBefore(DateTime.now().toUtc().add(_tokenRefreshBuffer)) ?? true;
   String? get email => _email;
   String? get phone => _phone;
   String? get userId => _userId;
-
-  // Consider all types of verifications to be "verified"
   bool get isVerified => isEmailVerified || isPhoneVerified || isIdVerified;
 
-  /// Initializes shared preferences and attempts auto-login using persisted tokens.
   Future<void> init() async {
     if (_initialized) return;
     _prefs ??= await SharedPreferences.getInstance();
     _loadPersistedData();
-
-    if (_token != null && _isTokenExpired && _refreshToken != null) {
-      try {
-        await refreshAuthToken();
-      } catch (_) {
-        await logout();
-      }
-    }
-
     _initialized = true;
     notifyListeners();
   }
@@ -130,7 +114,7 @@ class AuthService extends ChangeNotifier {
       );
       final data = _parseResponse(res);
       if (!data.containsKey('access_token')) {
-        notifyListeners(); // Just show message
+        notifyListeners();
       } else {
         await _handleAuthResponse(res);
       }
@@ -218,14 +202,11 @@ class AuthService extends ChangeNotifier {
 
         if (response.statusCode >= 200 && response.statusCode < 300) {
           final decoded = jsonDecode(responseBody);
-          debugPrint('Verification success: $decoded');
-
           _prefs?.setBool(_keys['idVerified']!, true);
           _isVerifying = false;
           notifyListeners();
           return;
         } else {
-          debugPrint('Attempt $attempt failed with status ${response.statusCode}: $responseBody');
           if (attempt == retryCount) {
             throw AppException('Verification failed after $retryCount attempts');
           }
@@ -233,7 +214,6 @@ class AuthService extends ChangeNotifier {
 
         await Future.delayed(Duration(seconds: attempt * 2));
       } catch (e) {
-        debugPrint('Attempt $attempt threw an error: $e');
         if (attempt == retryCount) {
           _isVerifying = false;
           notifyListeners();
@@ -281,9 +261,6 @@ class AuthService extends ChangeNotifier {
   Future<String?> getToken() async {
     await ensureInitialized();
     _loadPersistedData();
-    if (_isTokenExpired && _refreshToken != null) {
-      return await refreshAuthToken();
-    }
     return _token;
   }
 
@@ -326,7 +303,6 @@ class AuthService extends ChangeNotifier {
 
     _token = data['access_token'];
     _refreshToken = data['refresh_token'];
-    _tokenExpiry = DateTime.now().toUtc().add(Duration(seconds: data['expires_in']));
     _userId = user['id'].toString();
     _email = user['email'];
     _phone = user['phone_number'];
@@ -346,7 +322,6 @@ class AuthService extends ChangeNotifier {
     await _prefs?.setInt(_keys['age']!, _age ?? 0);
     await _prefs?.setString(_keys['gender']!, _gender ?? '');
     await _prefs?.setString(_keys['idImageUrl']!, _idImageUrl ?? '');
-    await _prefs?.setString(_keys['tokenExpiry']!, _tokenExpiry!.toIso8601String());
 
     await _prefs?.setBool(_keys['emailVerified']!, user['email_verified'] ?? false);
     await _prefs?.setBool(_keys['phoneVerified']!, user['phone_verified'] ?? false);
@@ -369,47 +344,6 @@ class AuthService extends ChangeNotifier {
     _age = p.getInt(_keys['age']!);
     _gender = p.getString(_keys['gender']!);
     _idImageUrl = p.getString(_keys['idImageUrl']!);
-
-    final expiryStr = p.getString(_keys['tokenExpiry']!);
-    if (expiryStr != null) {
-      try {
-        _tokenExpiry = DateTime.parse(expiryStr);
-      } catch (e) {
-        debugPrint('Failed to parse token expiry date: $e');
-        _tokenExpiry = null;
-      }
-    }
-  }
-
-  Future<void> _persistAuthData(Map<String, dynamic> data) async {
-    final p = _prefs;
-    if (p == null) return;
-  
-    final user = data['user'] ?? {};
-    _token = data['access_token'];
-    _refreshToken = data['refresh_token'];
-    _tokenExpiry = DateTime.now().toUtc().add(Duration(seconds: data['expires_in']));
-  
-    _userId = user['id']?.toString();
-    _email = user['email'];
-    _phone = user['phone_number'];
-    _firstName = user['first_name'];
-    _lastName = user['last_name'];
-    _age = user['age'];
-    _gender = user['gender'];
-    _idImageUrl = user['id_image_url'];
-  
-    await p.setString(_keys['token']!, _token!);
-    await p.setString(_keys['refreshToken']!, _refreshToken!);
-    await p.setString(_keys['userId']!, _userId ?? '');
-    await p.setString(_keys['email']!, _email ?? '');
-    await p.setString(_keys['phone']!, _phone ?? '');
-    await p.setString(_keys['firstName']!, _firstName ?? '');
-    await p.setString(_keys['lastName']!, _lastName ?? '');
-    if (_age != null) await p.setInt(_keys['age']!, _age!);
-    await p.setString(_keys['gender']!, _gender ?? '');
-    await p.setString(_keys['idImageUrl']!, _idImageUrl ?? '');
-    await p.setString(_keys['tokenExpiry']!, _tokenExpiry!.toIso8601String());
   }
 
   Future<void> _clearAuthData() async {
@@ -430,7 +364,6 @@ class AuthService extends ChangeNotifier {
     _age = null;
     _gender = null;
     _idImageUrl = null;
-    _tokenExpiry = null;
 
     notifyListeners();
   }
