@@ -185,18 +185,14 @@ class ApiService {
     int? companyId,
     bool forceRefresh = false,
   }) async {
-    if (page < 1) throw ApiException('Invalid page number', 400);
-    if (limit < 1 || limit > _maxLimit) {
-      throw ApiException('Limit must be between 1 and $_maxLimit', 400);
-    }
+    if (page < 1) throw ApiException('Invalid page', 400);
+    if (limit < 1 || limit > _maxLimit) throw ApiException('Invalid limit', 400);
 
     final cacheKey = 'rides_${fromLat}_${fromLng}_${toLat}_${toLng}_$page';
-    if (!forceRefresh && _isCacheValid(cacheKey)) {
-      return _responseCache[cacheKey]!;
-    }
+    if (!forceRefresh && _isCacheValid(cacheKey)) return _responseCache[cacheKey]!;
 
     try {
-      final queryParams = {
+      final uri = Uri.parse('$_baseUrl/rides').replace(queryParameters: {
         'from_lat': fromLat.toString(),
         'from_lng': fromLng.toString(),
         'to_lat': toLat.toString(),
@@ -205,10 +201,8 @@ class ApiService {
         'page': page.toString(),
         'limit': limit.toString(),
         if (companyId != null) 'company_id': companyId.toString(),
-      };
+      });
 
-      final uri = Uri.parse('$_baseUrl/rides').replace(queryParameters: queryParams);
-      
       final response = await _makeAuthenticatedRequest(
         () async => http.get(uri, headers: await _getHeaders()),
         endpointKey: 'rides',
@@ -216,19 +210,19 @@ class ApiService {
       );
 
       final data = _handleResponse(response);
-      _responseCache[cacheKey] = data;
-      _responseCache[cacheKey]!['cached_at'] = DateTime.now();
-      return data;
+      _responseCache[cacheKey] = {
+        'results': (data['results'] as List<dynamic>)
+            .map((json) => Ride.fromJson(json as Map<String, dynamic>))
+            .toList(),
+        'pagination': data['pagination'] as Map<String, dynamic>,
+        'cached_at': DateTime.now(),
+      };
+      return _responseCache[cacheKey]!;
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('Failed to load rides: ${e.toString()}', 0);
+      throw ApiException('Ride load failed: ${e}', 0);
     }
-  }
-
-  bool _isCacheValid(String key) {
-    return _responseCache.containsKey(key) &&
-        DateTime.now().difference(_responseCache[key]!['cached_at']) < _cacheDuration;
   }
 
   Future<Ride> createRide({
@@ -245,67 +239,73 @@ class ApiService {
     required String color,
   }) async {
     try {
-      if (seats < 1 || seats > 8) {
-        throw ApiException('Seats must be between 1 and 8', 400);
+      if (seats < 1 || seats > 8) throw ApiException('Invalid seats', 400);
+      if (departureTime?.isBefore(DateTime.now()) ?? false) {
+        throw ApiException('Invalid departure time', 400);
       }
-
-      if (departureTime != null && departureTime.isBefore(DateTime.now())) {
-        throw ApiException('Departure time must be in the future', 400);
-      }
-
-      final requestBody = {
-        'from': {'lat': from.latitude, 'lng': from.longitude},
-        'to': {'lat': to.latitude, 'lng': to.longitude},
-        'seats': seats,
-        'price_per_seat': pricePerSeat,
-        'from_address': fromAddress,
-        'to_address': toAddress,
-        'companies': companies,
-        'plate_number': plateNumber,
-        'brand_name': brandName,
-        'color': color,
-        if (departureTime != null) 'departure_time': departureTime.toIso8601String(),
-      };
 
       final response = await _makeAuthenticatedRequest(
         () async => http.post(
           Uri.parse('$_baseUrl/rides'),
           headers: await _getHeaders(),
-          body: jsonEncode(requestBody),
-          //endpointKey: 'create_ride',
-      ));
-
-      return Ride.fromJson(_handleResponse(response));
+          body: jsonEncode({
+            'from': {'lat': from.latitude, 'lng': from.longitude},
+            'to': {'lat': to.latitude, 'lng': to.longitude},
+            'seats': seats,
+            'price_per_seat': pricePerSeat,
+            'from_address': fromAddress,
+            'to_address': toAddress,
+            'companies': companies,
+            'plate_number': plateNumber,
+            'brand_name': brandName,
+            'color': color,
+            if (departureTime != null) 'departure_time': departureTime.toIso8601String(),
+          }),
+        ),
+      );
+      return Ride.fromJson(_handleResponse(response) as Map<String, dynamic>);
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('Failed to create ride: ${e.toString()}', 0);
+      throw ApiException('Ride creation failed: ${e}', 0);
     }
   }
 
+
+  List<User> _parseParticipants(dynamic participants) {
+    if (participants is! List) return [];
+    return participants.map((p) => User.fromJson({
+      ...p,
+      'created_at': p['created_at'] ?? DateTime.now().toIso8601String(),
+      'is_driver': p['is_driver'] ?? false,
+    })).toList();
+  }
+
+  // In ApiService
   Future<Map<String, dynamic>> getUserActiveRides({
     int page = 1,
     int limit = 20,
   }) async {
     try {
-      if (page < 1) throw ApiException('Invalid page number', 400);
-      if (limit < 1 || limit > _maxLimit) {
-        throw ApiException('Limit must be between 1 and $_maxLimit', 400);
+      if (page < 1 || limit < 1 || limit > _maxLimit) {
+        throw ApiException('Invalid pagination', 400);
       }
 
       final uri = Uri.parse('$_baseUrl/rides/user/active-rides').replace(
-        queryParameters: {
-          'page': page.toString(),
-          'limit': limit.toString(),
-        },
+        queryParameters: {'page': page.toString(), 'limit': limit.toString()},
       );
-
+  
       final response = await _makeAuthenticatedRequest(
         () async => http.get(uri, headers: await _getHeaders()),
         endpointKey: 'active_rides',
       );
-
-      return _handleResponse(response);
+  
+      final data = _handleResponse(response);
+  
+      return {
+        'results': data['results'] as List<dynamic>, // Keep as raw JSON
+        'pagination': data['pagination'] as Map<String, dynamic>,
+      };
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -313,18 +313,28 @@ class ApiService {
     }
   }
 
-  Future<User> getUserProfile() async {
+  bool _isCacheValid(String key) {
+    return _responseCache.containsKey(key) &&
+        DateTime.now().difference(_responseCache[key]!['cached_at'] as DateTime) < _cacheDuration;
+  }
+
+  Future<User> getUserProfile(String userId) async {
     try {
       final response = await _makeAuthenticatedRequest(
         () async => http.get(
-          Uri.parse('$_baseUrl/profile'),
+          Uri.parse('$_baseUrl/profile/$userId'),
           headers: await _getHeaders(),
         ),
-        endpointKey: 'profile',
+        endpointKey: 'profile/$userId',
       );
 
       final data = _handleResponse(response);
-      return User.fromJson(data['user']);
+
+      return User.fromJson({
+        ...data['user'],
+        'created_at': data['user']['created_at'] ?? DateTime.now().toIso8601String(),
+        'is_driver': data['user']['is_driver'] ?? false,
+      });
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -338,14 +348,21 @@ class ApiService {
     String? firstName,
     String? lastName,
     String? phoneNumber,
+    int? age,
+    String? gender,
+    String? profileImageUrl,
   }) async {
     try {
-      final body = <String, dynamic>{};
-      if (email != null) body['email'] = email;
-      if (password != null) body['password'] = password;
-      if (firstName != null) body['first_name'] = firstName;
-      if (lastName != null) body['last_name'] = lastName;
-      if (phoneNumber != null) body['phone_number'] = phoneNumber;
+      final body = <String, dynamic>{
+        if (email != null) 'email': email,
+        if (password != null) 'password': password,
+        if (firstName != null) 'first_name': firstName,
+        if (lastName != null) 'last_name': lastName,
+        if (phoneNumber != null) 'phone_number': phoneNumber,
+        if (age != null) 'age': age,
+        if (gender != null) 'gender': gender,
+        if (profileImageUrl != null) 'profile_image_url': profileImageUrl,
+      };
 
       if (body.isEmpty) {
         throw ApiException('At least one field must be provided for update', 400);
@@ -411,6 +428,42 @@ class ApiService {
       rethrow;
     } catch (e) {
       throw ApiException('Failed to cancel ride: ${e.toString()}', 0);
+    }
+  }
+
+  // Remove a user from ride (driver only)
+  Future<void> removeUserFromRide(String rideId, String userId) async {
+    try {
+      await _makeAuthenticatedRequest(
+        () async => http.post(
+          Uri.parse('$_baseUrl/rides/$rideId/remove-user'),
+          headers: await _getHeaders(),
+          body: jsonEncode({'userId': userId}),
+        ),
+        endpointKey: 'remove_user',
+      );
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException('Failed to remove user: ${e.toString()}', 0);
+    }
+  }
+
+  // Update ride status (ongoing/completed)
+  Future<void> updateRideStatus(String rideId, String status) async {
+    try {
+      await _makeAuthenticatedRequest(
+        () async => http.put(
+          Uri.parse('$_baseUrl/rides/$rideId/status'),
+          headers: await _getHeaders(),
+          body: jsonEncode({'status': status}),
+        ),
+        endpointKey: 'update_status',
+      );
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException('Failed to update ride status: ${e.toString()}', 0);
     }
   }
 
@@ -483,11 +536,18 @@ class ApiService {
       final response = await _makeAuthenticatedRequest(
         () async => http.get(
           Uri.parse('$_baseUrl/rides/$rideId'),
-          headers: await _getHeaders()),
+          headers: await _getHeaders(),
+        ),
         endpointKey: 'ride_details',
       );
-
-      return Ride.fromJson(_handleResponse(response));
+  
+      final data = _handleResponse(response);
+  
+      return Ride.fromJson({
+        ...data,
+        'participants': _parseParticipants(data['participants']),
+        'is_driver': data['is_driver'] ?? false,
+      });
     } on ApiException {
       rethrow;
     } catch (e) {
