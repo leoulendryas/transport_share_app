@@ -1,4 +1,3 @@
-/// A model representing a user in the system.
 class User {
   final int id;
   final String email;
@@ -12,6 +11,8 @@ class User {
   final String? gender;
   final bool idVerified;
   final String? idImageUrl;
+  final String? profileImageUrl;
+  final bool isDriver;
 
   const User({
     required this.id,
@@ -26,22 +27,26 @@ class User {
     this.gender,
     required this.idVerified,
     this.idImageUrl,
+    this.profileImageUrl,
+    required this.isDriver,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'] as int,
-      email: json['email'] as String,
-      createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
+      email: json['email'] as String? ?? '', // Handle null email
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
       firstName: json['first_name'] as String?,
       lastName: json['last_name'] as String?,
       phoneNumber: json['phone_number'] as String?,
-      emailVerified: json['email_verified'] as bool? ?? false,
-      phoneVerified: json['phone_verified'] as bool? ?? false,
-      age: json['age'] as int?,
+      emailVerified: (json['email_verified'] as bool?) ?? false,
+      phoneVerified: (json['phone_verified'] as bool?) ?? false,
+      age: (json['age'] as num?)?.toInt(),
       gender: json['gender'] as String?,
-      idVerified: json['id_verified'] as bool? ?? false,
+      idVerified: (json['id_verified'] as bool?) ?? false,
       idImageUrl: json['id_image_url'] as String?,
+      profileImageUrl: json['profile_image_url'] as String?,
+      isDriver: (json['is_driver'] as bool?) ?? false,
     );
   }
 
@@ -59,6 +64,8 @@ class User {
       'gender': gender,
       'id_verified': idVerified,
       'id_image_url': idImageUrl,
+      'profile_image_url': profileImageUrl,
+      'is_driver': isDriver,
     };
   }
 
@@ -75,6 +82,8 @@ class User {
     String? gender,
     bool? idVerified,
     String? idImageUrl,
+    String? profileImageUrl,
+    bool? isDriver,
   }) {
     return User(
       id: id ?? this.id,
@@ -89,6 +98,13 @@ class User {
       gender: gender ?? this.gender,
       idVerified: idVerified ?? this.idVerified,
       idImageUrl: idImageUrl ?? this.idImageUrl,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
+      isDriver: isDriver ?? this.isDriver,
     );
+  }
+  static User parse(dynamic data) {
+    if (data is User) return data;
+    if (data is Map<String, dynamic>) return User.fromJson(data);
+    throw FormatException('Invalid data for User');
   }
 }
