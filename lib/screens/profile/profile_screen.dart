@@ -42,7 +42,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadUserProfile() async {
     setState(() => _isLoading = true);
     try {
-      final user = await _apiService.getUserProfile();
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId') ?? '';  // or however you store it
+  
+      final user = await _apiService.getUserProfile(userId);
+  
       setState(() {
         _originalUser = user;
         _emailController.text = user.email;
