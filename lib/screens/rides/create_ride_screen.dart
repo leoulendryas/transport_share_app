@@ -124,35 +124,52 @@ class _CreateRideScreenState extends State<CreateRideScreen> {
   }
 
   Future<List<LocationWithName>> _getLocationSuggestions(String query) async {
-    if (query.isEmpty) return [];
-    _searchDebounce?.cancel();
+    if (query.trim().isEmpty) return [];
 
+    _searchDebounce?.cancel();
     final completer = Completer<List<LocationWithName>>();
 
     _searchDebounce = Timer(const Duration(milliseconds: 500), () async {
       try {
+        final encodedQuery = Uri.encodeComponent(query.trim());
+
         final uri = Uri.parse(
-          'https://nominatim.openstreetmap.org/search?q=$query, Addis Ababa&format=json&addressdetails=1',
+          'https://mapapi.gebeta.app/api/v1/route/geocoding?name=$encodedQuery&apiKey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb21wYW55bmFtZSI6Ikxlb3VsIiwiZGVzY3JpcHRpb24iOiIxMTMzMTE1NS0yOTFmLTQ3MzUtYTIwZC0wZjU0MWJjMWNiOTgiLCJpZCI6ImNmOThhMmFhLTI1MjMtNGJjMy1hZjQ3LWQ1YTg5NmE4YWVlYSIsInVzZXJuYW1lIjoibWV0X3NoYXJlIn0.TRwOavn8s40_falGjRYvO9vIfYQH0m8FjXqGb7-GIaM',
         );
 
-        final response = await http.get(uri, headers: {
-            'User-Agent': 'MetShare/1.0 (leoulendryas@gmail.com)',
-        });
+        final response = await http.get(
+          uri,
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'MetShare/1.0 (metshareofficial@gmail.com)',
+          },
+        );
 
         if (response.statusCode == 200) {
-          final data = json.decode(response.body) as List;
-          final suggestions = data.map((item) => LocationWithName(
-            latitude: double.parse(item['lat']),
-            longitude: double.parse(item['lon']),
-            displayName: item['display_name'] ?? '${item['lat']}, ${item['lon']}',
-          )).toList();
+          final data = json.decode(response.body);
+
+          // The structure of this endpoint is different — assumes `results` list
+          final locations = data['data'] as List;
+
+          final suggestions = locations.map((item) {
+            final lat = item['latitude']; // Changed from 'lat' to 'latitude'
+            final lng = item['longitude']; 
+            final label = item['name'] ?? '$lat, $lng';
+
+            return LocationWithName(
+              latitude: lat,
+              longitude: lng,
+              displayName: label,
+            );
+          }).toList();
 
           completer.complete(suggestions);
         } else {
+          debugPrint('Gebeta Maps API error: ${response.statusCode}');
           completer.complete([]);
         }
       } catch (e) {
-        debugPrint('OpenStreetMap error: $e');
+        debugPrint('Gebeta Maps exception: $e');
         completer.complete([]);
       }
     });
