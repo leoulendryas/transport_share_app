@@ -53,7 +53,6 @@ class RideCard extends StatelessWidget {
       'gray': Colors.grey,
       'silver': Colors.grey.shade400,
       'grey': Colors.grey,
-      'white': Colors.white,
       'yellow': Colors.yellow,
       'orange': Colors.orange,
       'purple': Colors.purple,
@@ -233,6 +232,9 @@ class RideCard extends StatelessWidget {
                   const SizedBox(height: 12),
                 ],
 
+                // Participants Row
+                _buildParticipantsRow(),
+
                 // Progress Bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(3),
@@ -247,6 +249,49 @@ class RideCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildParticipantsRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.people, size: 16, color: Color(0xFF004F2D)),
+          const SizedBox(width: 4),
+          Text(
+            '${ride.participants.length} members',
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF004F2D),
+            ),
+          ),
+          const Spacer(),
+          SizedBox(
+            height: 24,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              shrinkWrap: true,
+              itemCount: ride.participants.take(3).length,
+              itemBuilder: (context, index) {
+                final user = ride.participants[index];
+                return Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: CircleAvatar(
+                    radius: 12,
+                    backgroundImage: user.profileImageUrl != null
+                        ? NetworkImage(user.profileImageUrl!)
+                        : null,
+                    child: user.profileImageUrl == null
+                        ? const Icon(Icons.person, size: 12)
+                        : null,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
