@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../models/message.dart';
+import '../../models/user.dart';
 import '../../models/ride.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
@@ -11,6 +12,7 @@ import '../../widgets/message_bubble.dart';
 import '../../widgets/connection_status_bar.dart';
 import '../../widgets/participants_chip.dart';
 import '../../widgets/glass_card.dart';
+import '../../screens/profile/user_profile_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String rideId;
@@ -43,6 +45,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _typingTimer;
   final Map<String, String> _participantEmails = {};
   final Map<String, String> _participantNames = {};
+  List<User> _participants = [];
 
   @override
   void initState() {
@@ -143,26 +146,37 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final participation = await _apiService.checkRideParticipation(widget.rideId);
       final userId = _authService.userId;
-      
+
       if (userId != null) {
-        _participantEmails[userId] = _authService.email ?? '';
-        _participantNames[userId] = 'You';
+        // Add current user (you) if needed
+        final currentUser = User(
+          id: int.parse(userId),
+          email: _authService.email ?? '',
+          createdAt: DateTime.now(),
+          firstName: 'You',
+          lastName: null,
+          phoneNumber: null,
+          emailVerified: true,
+          phoneVerified: true,
+          age: null,
+          gender: null,
+          idVerified: false,
+          idImageUrl: null,
+          profileImageUrl: null,
+          isDriver: false,
+        );
+        _participants.add(currentUser);
       }
-      
+
       if (participation['participants'] != null) {
-        for (final participant in participation['participants']) {
-          final id = participant['id'] as String;
-          _participantEmails[id] = participant['email'] as String;
-          _participantNames[id] = participant['name'] as String? ?? participant['email'] as String;
-        }
+        _participants.addAll((participation['participants'] as List)
+            .map((p) => User.fromJson(p as Map<String, dynamic>))
+            .toList());
       }
+
+      setState(() {});
     } catch (e, stackTrace) {
       debugPrint('Error loading participants: $e\n$stackTrace');
-      final userId = _authService.userId;
-      if (userId != null) {
-        _participantEmails[userId] = _authService.email ?? '';
-        _participantNames[userId] = 'You';
-      }
     }
   }
 
@@ -550,79 +564,74 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _showParticipantsDialog() async {
+  void _showParticipantsDialog() async {
     try {
-      final participation = await _apiService.checkRideParticipation(widget.rideId);
+      final ride = await _apiService.getRideDetails(widget.rideId);
       if (!mounted) return;
-  
-      final participants = participation['participants'] as List<dynamic>? ?? [];
-      final driverId = participation['driverId'] as String? ?? widget.rideDetails?.driverId;
-  
-      await showDialog(
+
+      final currentUserIsDriver = ride.currentUser?['is_driver'] ?? false;
+
+      showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          backgroundColor: Colors.black,
-          title: const Text(
-            'Participants',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!participants.any((p) => p['id'] == _authService.userId))
-                  _buildParticipantTile(
-                    _authService.email ?? 'You',
-                    _authService.email ?? '',
-                    _authService.userId == driverId,
-                  ),
-                ...participants.map((user) => _buildParticipantTile(
-                  user['name'] as String? ?? user['email'] as String,
-                  user['email'] as String,
-                  user['id'] == driverId,
-                )),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Close',
-                style: TextStyle(color: Color(0xFF004F2D)),
-              ),
-            ),
-          ],
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Color(0xFF004F2D).withOpacity(0.3)),
+          title: const Text('Participants'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${ride.participants.length} Members'),
+              const SizedBox(height: 16),
+              ...ride.participants.map((user) => _buildParticipantTile(
+                user, 
+                currentUserIsDriver,
+              )),
+            ],
           ),
         ),
       );
-    } catch (e, stackTrace) {
-      debugPrint('Error showing participants dialog: $e\n$stackTrace');
-      if (mounted) {
-        _showErrorSnackbar('Failed to load participants');
-      }
+    } catch (e) {
+      _showErrorSnackbar('Failed to load participants');
     }
   }
 
-  Widget _buildParticipantTile(String name, String email, bool isDriver) {
+  Widget _buildParticipantTile(User user, bool currentUserIsDriver) {
+    final firstName = user.firstName ?? '';
+    final lastName = user.lastName ?? '';
+    final fullName = '$firstName $lastName'.trim();
+  
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: Color(0xFF004F2D),
-        child: Text(
-          name.isNotEmpty ? name[0].toUpperCase() : '?',
-          style: const TextStyle(color: Colors.white),
+        backgroundImage: user.profileImageUrl != null 
+            ? NetworkImage(user.profileImageUrl!)
+            : null,
+        child: user.profileImageUrl == null 
+            ? const Icon(Icons.person)
+            : null,
+      ),
+      title: Text(fullName.isNotEmpty ? fullName : 'Unknown'),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(user.isDriver ? 'Driver' : 'Passenger'),
+          if (user.age != null) Text('Age: ${user.age}'),
+          if (user.gender != null) Text('Gender: ${user.gender}'),
+        ],
+      ),
+      onTap: () => _navigateToUserProfile(
+        user.id.toString(),
+        currentUserIsDriver,
+      ),
+    );
+  }
+
+  void _navigateToUserProfile(String userId, bool isDriver) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileScreen(
+          userId: userId,
+          rideId: widget.rideId,
+          isDriver: isDriver,  // Now passing current user's driver status
         ),
-      ),
-      title: Text(
-        name,
-        style: const TextStyle(color: Colors.white),
-      ),
-      subtitle: Text(
-        '${isDriver ? 'Driver' : 'Passenger'} • $email',
-        style: TextStyle(color: Colors.white.withOpacity(0.6)),
       ),
     );
   }
